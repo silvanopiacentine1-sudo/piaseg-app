@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# ChromaDB e dados locais
+backend/chroma_db/
+backend/indexed_manifest.json
+backend/faq_data.json
+backend/faq.csv
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
