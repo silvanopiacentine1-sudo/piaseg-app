@@ -78,6 +78,12 @@ def save_manifest(data: dict) -> None:
 
 def sync_index() -> list:
     """Verifica a pasta de PDFs e indexa arquivos novos ou alterados."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[sync_index] Não foi possível criar DATA_DIR ({DATA_DIR}): {e}")
+        return []
+
     if not PDF_FOLDER.exists():
         return []
 
@@ -87,7 +93,6 @@ def sync_index() -> list:
         return []
 
     manifest = load_manifest()
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=DB_PATH)
     ef = embedding_functions.DefaultEmbeddingFunction()
     collection = client.get_or_create_collection("seguros", embedding_function=ef)
