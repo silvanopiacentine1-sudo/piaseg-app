@@ -41,8 +41,14 @@ def _watch_pdf_folder():
 
 @app.on_event("startup")
 def on_startup():
-    PDF_FOLDER.mkdir(parents=True, exist_ok=True)
-    sync_index()
+    try:
+        PDF_FOLDER.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[startup] Aviso: não foi possível criar pasta de PDFs ({PDF_FOLDER}): {e}")
+    try:
+        sync_index()
+    except Exception as e:
+        print(f"[startup] Aviso: sync_index falhou: {e}")
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
 
 

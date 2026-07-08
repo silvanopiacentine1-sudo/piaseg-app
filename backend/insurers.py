@@ -11,8 +11,15 @@ from chromadb.utils import embedding_functions
 _DEFAULT_PDF_FOLDER = "/Users/silvanopiacentine/Desktop/trabalho/Cond Gerais"
 PDF_FOLDER = Path(os.getenv("PDF_FOLDER_PATH", _DEFAULT_PDF_FOLDER))
 
-_DEFAULT_DATA_DIR = str(Path(__file__).parent)
-DATA_DIR = Path(os.getenv("DATA_DIR", _DEFAULT_DATA_DIR))
+_APP_DIR = Path(__file__).parent
+_requested = Path(os.getenv("DATA_DIR", str(_APP_DIR)))
+# Valida se o DATA_DIR configurado é acessível; senão, usa o diretório do app
+try:
+    _requested.mkdir(parents=True, exist_ok=True)
+    DATA_DIR = _requested
+except Exception:
+    DATA_DIR = _APP_DIR
+
 DB_PATH = str(DATA_DIR / "chroma_db")
 MANIFEST_PATH = DATA_DIR / "indexed_manifest.json"
 
