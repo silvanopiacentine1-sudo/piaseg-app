@@ -2,10 +2,13 @@ import json
 import os
 import re
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional
 
-import pdfplumber
+import pypdf
+
+_sync_lock = threading.Lock()
 
 _DEFAULT_PDF_FOLDER = "/Users/silvanopiacentine/Desktop/trabalho/Cond Gerais"
 PDF_FOLDER = Path(os.getenv("PDF_FOLDER_PATH", _DEFAULT_PDF_FOLDER))
@@ -87,9 +90,13 @@ def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 
 
 def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) -> list:
     chunks = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page_num, page in enumerate(pdf.pages, start=1):
-            text = (page.extract_text() or "").strip()
+    with open(pdf_path, "rb") as f:
+        reader = pypdf.PdfReader(f)
+        for page_num, page in enumerate(reader.pages, start=1):
+            try:
+                text = (page.extract_text() or "").strip()
+            except Exception:
+                continue
             if not text:
                 continue
             start = 0
@@ -114,54 +121,59 @@ def save_manifest(data: dict) -> None:
 
 
 def sync_index() -> list:
+    if not _sync_lock.acquire(blocking=False):
+        return []  # Outra indexação já está em andamento
     try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(f"[sync_index] Não foi possível criar DATA_DIR ({DATA_DIR}): {e}")
-        return []
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[sync_index] Não foi possível criar DATA_DIR ({DATA_DIR}): {e}")
+            return []
 
-    if not PDF_FOLDER.exists():
-        return []
+        if not PDF_FOLDER.exists():
+            return []
 
-    try:
-        pdf_files = sorted(PDF_FOLDER.glob("*.pdf"))
-    except (PermissionError, OSError):
-        return []
+        try:
+            pdf_files = sorted(PDF_FOLDER.glob("*.pdf"))
+        except (PermissionError, OSError):
+            return []
 
-    manifest = load_manifest()
+        manifest = load_manifest()
 
-    # Se o banco está vazio mas o manifest tem entradas, força re-indexação
-    conn = get_db()
-    count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-    conn.close()
-    if count == 0 and manifest:
-        manifest = {}
+        # Se o banco está vazio mas o manifest tem entradas, força re-indexação
+        conn = get_db()
+        count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        conn.close()
+        if count == 0 and manifest:
+            manifest = {}
 
-    needs_update = [p for p in pdf_files if manifest.get(p.name) != p.stat().st_mtime]
-    if not needs_update:
-        return []
+        needs_update = [p for p in pdf_files if manifest.get(p.name) != p.stat().st_mtime]
+        if not needs_update:
+            return []
 
-    conn = get_db()
-    updated = []
-    for pdf_path in needs_update:
-        key = pdf_path.name
-        mtime = pdf_path.stat().st_mtime
+        conn = get_db()
+        updated = []
+        for pdf_path in needs_update:
+            key = pdf_path.name
+            mtime = pdf_path.stat().st_mtime
 
-        conn.execute("DELETE FROM chunks WHERE source = ?", (key,))
-        chunks = extract_chunks(pdf_path)
-        if chunks:
-            conn.executemany(
-                "INSERT INTO chunks (source, page, text) VALUES (?, ?, ?)",
-                [(c["source"], str(c["page"]), c["text"]) for c in chunks],
-            )
+            conn.execute("DELETE FROM chunks WHERE source = ?", (key,))
+            chunks = extract_chunks(pdf_path)
+            if chunks:
+                conn.executemany(
+                    "INSERT INTO chunks (source, page, text) VALUES (?, ?, ?)",
+                    [(c["source"], str(c["page"]), c["text"]) for c in chunks],
+                )
 
-        manifest[key] = mtime
-        updated.append(key)
+            manifest[key] = mtime
+            updated.append(key)
 
-    conn.commit()
-    conn.close()
-    save_manifest(manifest)
-    return updated
+        conn.commit()
+        conn.close()
+        save_manifest(manifest)
+        return updated
+    finally:
+        _sync_lock.release()
 
 
 def delete_pdf(filename: str) -> bool:
