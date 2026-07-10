@@ -111,16 +111,20 @@ def sync_index() -> list:
         return []
 
     manifest = load_manifest()
+
+    # Verifica quais PDFs precisam de indexação ANTES de carregar o ChromaDB/ONNX
+    # Isso evita carregar o modelo pesado (~200MB) quando não há nada para indexar
+    needs_update = [p for p in pdf_files if manifest.get(p.name) != p.stat().st_mtime]
+    if not needs_update:
+        return []
+
     client, ef = _get_chroma()
     collection = client.get_or_create_collection("seguros", embedding_function=ef)
 
     updated = []
-    for pdf_path in pdf_files:
+    for pdf_path in needs_update:
         key = pdf_path.name
         mtime = pdf_path.stat().st_mtime
-        if manifest.get(key) == mtime:
-            continue
-
         try:
             collection.delete(where={"source": key})
         except Exception:
