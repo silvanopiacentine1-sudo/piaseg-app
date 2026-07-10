@@ -226,12 +226,13 @@ export default function AdminPage() {
         className="flex items-center justify-between px-4 py-3 shadow-md"
         style={{ background: "linear-gradient(135deg, #00213A 0%, #0a3a5c 100%)" }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center text-sm font-bold"
-            style={{ background: "rgba(184,151,92,0.3)", color: "#d4b87a" }}
-          >
-            PS
+        <div className="flex items-center gap-2">
+          <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30" style={{ background: "white" }}>
+            <img
+              src="/mascote.png"
+              alt="Piazinho"
+              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
+            />
           </div>
           <div>
             <p className="text-white text-sm font-semibold leading-tight">Administração</p>

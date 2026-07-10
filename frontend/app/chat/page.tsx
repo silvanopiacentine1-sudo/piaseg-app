@@ -91,12 +91,13 @@ export default function ChatPage() {
         className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0"
         style={{ background: "linear-gradient(135deg, #00213A 0%, #0a3a5c 100%)" }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center text-sm font-bold"
-            style={{ background: "rgba(184,151,92,0.3)", color: "#d4b87a" }}
-          >
-            PS
+        <div className="flex items-center gap-2">
+          <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30" style={{ background: "white" }}>
+            <img
+              src="/mascote.png"
+              alt="Piazinho"
+              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
+            />
           </div>
           <div>
             <p className="text-white text-sm font-semibold leading-tight">Piazinho</p>
@@ -126,11 +127,12 @@ export default function ChatPage() {
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
-              <div
-                className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mr-2 mt-0.5"
-                style={{ background: "#B8975C", color: "white" }}
-              >
-                P
+              <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mr-2 mt-0.5 border border-amber-200" style={{ background: "white" }}>
+                <img
+                  src="/mascote.png"
+                  alt="Piazinho"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
+                />
               </div>
             )}
             <div className="max-w-[82%]">
@@ -178,11 +180,12 @@ export default function ChatPage() {
 
         {loading && (
           <div className="flex justify-start">
-            <div
-              className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mr-2"
-              style={{ background: "#B8975C", color: "white" }}
-            >
-              P
+            <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mr-2 border border-amber-200" style={{ background: "white" }}>
+              <img
+                src="/mascote.png"
+                alt="Piazinho"
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
+              />
             </div>
             <div
               className="rounded-2xl px-4 py-3 shadow-sm"
