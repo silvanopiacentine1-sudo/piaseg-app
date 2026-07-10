@@ -45,21 +45,16 @@ export default function LoginPage() {
       style={{ background: "linear-gradient(160deg, #00213A 0%, #0a3a5c 60%, #001528 100%)" }}
     >
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header dourado */}
+        {/* Header com logo oficial */}
         <div
-          className="px-8 py-7 text-center"
-          style={{ background: "linear-gradient(135deg, #B8975C 0%, #d4b87a 50%, #9a7d4a 100%)" }}
+          className="px-8 py-8 flex justify-center items-center"
+          style={{ background: "white", borderBottom: "3px solid #B8975C" }}
         >
-          <div className="mb-3 flex justify-center">
-            <div
-              className="w-16 h-16 rounded-full border-2 border-white flex items-center justify-center"
-              style={{ background: "rgba(0,0,0,0.15)" }}
-            >
-              <span className="text-white text-2xl font-bold tracking-tight">PS</span>
-            </div>
-          </div>
-          <h1 className="text-white text-xl font-bold tracking-wide">PIASEG SEGUROS</h1>
-          <p className="text-white/80 text-xs tracking-widest mt-0.5">FRANCHISING</p>
+          <img
+            src="/logo-piaseg.png"
+            alt="Piaseg Seguros Franchising"
+            style={{ height: "72px", width: "auto" }}
+          />
         </div>
 
         {/* Formulário */}
