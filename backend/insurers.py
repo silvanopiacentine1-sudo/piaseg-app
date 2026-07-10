@@ -1,37 +1,24 @@
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
-import chromadb
 import pdfplumber
-from chromadb.utils import embedding_functions
-
-_chroma_client = None
-_chroma_ef = None
-
-
-def _get_chroma():
-    global _chroma_client, _chroma_ef
-    if _chroma_client is None:
-        _chroma_client = chromadb.PersistentClient(path=DB_PATH)
-        _chroma_ef = embedding_functions.DefaultEmbeddingFunction()
-    return _chroma_client, _chroma_ef
 
 _DEFAULT_PDF_FOLDER = "/Users/silvanopiacentine/Desktop/trabalho/Cond Gerais"
 PDF_FOLDER = Path(os.getenv("PDF_FOLDER_PATH", _DEFAULT_PDF_FOLDER))
 
 _APP_DIR = Path(__file__).parent
 _requested = Path(os.getenv("DATA_DIR", str(_APP_DIR)))
-# Valida se o DATA_DIR configurado é acessível; senão, usa o diretório do app
 try:
     _requested.mkdir(parents=True, exist_ok=True)
     DATA_DIR = _requested
 except Exception:
     DATA_DIR = _APP_DIR
 
-DB_PATH = str(DATA_DIR / "chroma_db")
+SEARCH_DB_PATH = str(DATA_DIR / "search.db")
 MANIFEST_PATH = DATA_DIR / "indexed_manifest.json"
 
 KNOWN_DISPLAY_NAMES = {
@@ -56,7 +43,6 @@ def derive_display_name(filename: str) -> str:
 
 
 def discover_insurers() -> dict:
-    """Retorna {nome_do_arquivo: nome_de_exibicao} para todos os PDFs na pasta."""
     if not PDF_FOLDER.exists():
         return {}
     try:
@@ -64,6 +50,39 @@ def discover_insurers() -> dict:
     except (PermissionError, OSError):
         manifest = load_manifest()
         return {name: derive_display_name(name) for name in manifest.keys()}
+
+
+def get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(SEARCH_DB_PATH)
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks
+        USING fts5(source UNINDEXED, page UNINDEXED, text, tokenize='unicode61')
+    """)
+    conn.commit()
+    return conn
+
+
+def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 6) -> list:
+    clean = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).strip()
+    if not clean:
+        return []
+    conn = get_db()
+    try:
+        if source_filter:
+            rows = conn.execute(
+                "SELECT source, page, text FROM chunks WHERE text MATCH ? AND source = ? ORDER BY rank LIMIT ?",
+                (clean, source_filter, top_k)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT source, page, text FROM chunks WHERE text MATCH ? ORDER BY rank LIMIT ?",
+                (clean, top_k)
+            ).fetchall()
+        return [{"source": r[0], "page": int(r[1]) if r[1] else 0, "text": r[2]} for r in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()
 
 
 def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) -> list:
@@ -95,7 +114,6 @@ def save_manifest(data: dict) -> None:
 
 
 def sync_index() -> list:
-    """Verifica a pasta de PDFs e indexa arquivos novos ou alterados."""
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     except Exception as e:
@@ -112,51 +130,49 @@ def sync_index() -> list:
 
     manifest = load_manifest()
 
-    # Verifica quais PDFs precisam de indexação ANTES de carregar o ChromaDB/ONNX
-    # Isso evita carregar o modelo pesado (~200MB) quando não há nada para indexar
+    # Se o banco está vazio mas o manifest tem entradas, força re-indexação
+    conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    conn.close()
+    if count == 0 and manifest:
+        manifest = {}
+
     needs_update = [p for p in pdf_files if manifest.get(p.name) != p.stat().st_mtime]
     if not needs_update:
         return []
 
-    client, ef = _get_chroma()
-    collection = client.get_or_create_collection("seguros", embedding_function=ef)
-
+    conn = get_db()
     updated = []
     for pdf_path in needs_update:
         key = pdf_path.name
         mtime = pdf_path.stat().st_mtime
-        try:
-            collection.delete(where={"source": key})
-        except Exception:
-            pass
 
+        conn.execute("DELETE FROM chunks WHERE source = ?", (key,))
         chunks = extract_chunks(pdf_path)
         if chunks:
-            collection.add(
-                documents=[c["text"] for c in chunks],
-                metadatas=[{"source": c["source"], "page": c["page"]} for c in chunks],
-                ids=[f"{key}_{i}" for i in range(len(chunks))],
+            conn.executemany(
+                "INSERT INTO chunks (source, page, text) VALUES (?, ?, ?)",
+                [(c["source"], str(c["page"]), c["text"]) for c in chunks],
             )
 
         manifest[key] = mtime
         updated.append(key)
 
+    conn.commit()
+    conn.close()
     save_manifest(manifest)
     return updated
 
 
 def delete_pdf(filename: str) -> bool:
-    """Remove um PDF da pasta e desindexar do ChromaDB."""
     pdf_path = PDF_FOLDER / filename
     if not pdf_path.exists():
         return False
 
-    client, ef = _get_chroma()
-    collection = client.get_or_create_collection("seguros", embedding_function=ef)
-    try:
-        collection.delete(where={"source": filename})
-    except Exception:
-        pass
+    conn = get_db()
+    conn.execute("DELETE FROM chunks WHERE source = ?", (filename,))
+    conn.commit()
+    conn.close()
 
     manifest = load_manifest()
     manifest.pop(filename, None)
