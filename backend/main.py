@@ -32,10 +32,12 @@ from rag import (
 
 app = FastAPI(title="Piaseg Seguros API")
 
-PDF_WATCH_INTERVAL_SECONDS = 30
+PDF_WATCH_INTERVAL_SECONDS = 120
 
 
 def _watch_pdf_folder():
+    # Aguarda 60s antes da primeira verificação para não sobrecarregar a memória no startup
+    time.sleep(60)
     while True:
         try:
             updated = sync_index()
@@ -53,10 +55,8 @@ def on_startup():
         PDF_FOLDER.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         print(f"[startup] Aviso: não foi possível criar pasta de PDFs ({PDF_FOLDER}): {e}")
-    try:
-        sync_index()
-    except Exception as e:
-        print(f"[startup] Aviso: sync_index falhou: {e}")
+    # sync_index() removido do startup: evita carregar o modelo ONNX duas vezes (512MB Render)
+    # O watcher thread indexa novos PDFs após 60s do startup
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
 
 

@@ -8,6 +8,17 @@ import chromadb
 import pdfplumber
 from chromadb.utils import embedding_functions
 
+_chroma_client = None
+_chroma_ef = None
+
+
+def _get_chroma():
+    global _chroma_client, _chroma_ef
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=DB_PATH)
+        _chroma_ef = embedding_functions.DefaultEmbeddingFunction()
+    return _chroma_client, _chroma_ef
+
 _DEFAULT_PDF_FOLDER = "/Users/silvanopiacentine/Desktop/trabalho/Cond Gerais"
 PDF_FOLDER = Path(os.getenv("PDF_FOLDER_PATH", _DEFAULT_PDF_FOLDER))
 
@@ -100,8 +111,7 @@ def sync_index() -> list:
         return []
 
     manifest = load_manifest()
-    client = chromadb.PersistentClient(path=DB_PATH)
-    ef = embedding_functions.DefaultEmbeddingFunction()
+    client, ef = _get_chroma()
     collection = client.get_or_create_collection("seguros", embedding_function=ef)
 
     updated = []
@@ -137,8 +147,7 @@ def delete_pdf(filename: str) -> bool:
     if not pdf_path.exists():
         return False
 
-    client = chromadb.PersistentClient(path=DB_PATH)
-    ef = embedding_functions.DefaultEmbeddingFunction()
+    client, ef = _get_chroma()
     collection = client.get_or_create_collection("seguros", embedding_function=ef)
     try:
         collection.delete(where={"source": filename})
