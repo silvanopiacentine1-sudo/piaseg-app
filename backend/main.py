@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from auth import authenticate, create_token, decode_token
+from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users
 from insurers import PDF_FOLDER, derive_display_name, delete_pdf, sync_index
 from rag import (
     add_faq_entry,
@@ -96,6 +96,13 @@ class FaqEntry(BaseModel):
     insurer: str
     question: str
     answer: str
+
+
+class UserCreate(BaseModel):
+    username: str
+    name: str
+    password: str
+    is_admin: bool = False
 
 
 @app.post("/auth/login")
@@ -195,6 +202,33 @@ def create_faq_entry(body: FaqEntry, user: dict = Depends(require_admin)):
 @app.delete("/faq/{faq_id}")
 def remove_faq_entry(faq_id: str, user: dict = Depends(require_admin)):
     delete_faq_entry(faq_id)
+    return {"ok": True}
+
+
+@app.get("/admin/users")
+def list_users_endpoint(user: dict = Depends(require_admin)):
+    return [
+        {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False)}
+        for u in load_users()
+    ]
+
+
+@app.post("/admin/users", status_code=201)
+def create_user_endpoint(body: UserCreate, user: dict = Depends(require_admin)):
+    if not body.username.strip() or not body.name.strip() or not body.password:
+        raise HTTPException(status_code=400, detail="Todos os campos são obrigatórios")
+    try:
+        return create_user(body.username.strip(), body.name.strip(), body.password, body.is_admin)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.delete("/admin/users/{username}")
+def delete_user_endpoint(username: str, current_user: dict = Depends(require_admin)):
+    if username == "admin":
+        raise HTTPException(status_code=400, detail="Não é possível remover o usuário admin")
+    if not delete_user(username):
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
     return {"ok": True}
 
 

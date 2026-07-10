@@ -32,7 +32,7 @@ export default function ChatPage() {
     setIsAdmin(localStorage.getItem("piaseg_is_admin") === "1");
     setMessages([{
       role: "assistant",
-      content: `Olá${n ? `, ${n}` : ""}! 👋 Sou o Piazinho, assistente virtual da Piaseg. O que vamos falar hoje? 😊`,
+      content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o Piazinho, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
     }]);
   }, [router]);
 

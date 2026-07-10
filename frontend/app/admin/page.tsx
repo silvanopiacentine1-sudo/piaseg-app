@@ -12,6 +12,12 @@ interface FaqItem {
   answer: string;
 }
 
+interface UserItem {
+  username: string;
+  name: string;
+  is_admin: boolean;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -30,7 +36,16 @@ export default function AdminPage() {
   const [uploadMsg, setUploadMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs">("pdfs");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "users">("pdfs");
+
+  // Users tab state
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [newUsername, setNewUsername] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newIsAdmin, setNewIsAdmin] = useState(false);
+  const [savingUser, setSavingUser] = useState(false);
+  const [userMsg, setUserMsg] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
@@ -43,7 +58,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t)]);
     setLoading(false);
   }
 
@@ -70,6 +85,13 @@ export default function AdminPage() {
     } catch {
       setError("Não foi possível carregar o FAQ.");
     }
+  }
+
+  async function loadUsers(t: string) {
+    try {
+      const res = await fetch(`${API}/admin/users`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setUsers(await res.json());
+    } catch { /* silencioso */ }
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -142,7 +164,52 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
-  const tabStyle = (tab: "faq" | "pdfs") => ({
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUsername.trim() || !newName.trim() || !newPassword) return;
+    setSavingUser(true);
+    setUserMsg("");
+    try {
+      const res = await fetch(`${API}/admin/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          username: newUsername.trim(),
+          name: newName.trim(),
+          password: newPassword,
+          is_admin: newIsAdmin,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setUserMsg(`Erro: ${data.detail ?? "Não foi possível criar o usuário."}`); return; }
+      setUserMsg(`✓ Usuário "${data.name}" criado com sucesso.`);
+      setNewUsername("");
+      setNewName("");
+      setNewPassword("");
+      setNewIsAdmin(false);
+      await loadUsers(token);
+    } catch {
+      setUserMsg("Erro ao conectar ao servidor.");
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function handleDeleteUser(username: string, name: string) {
+    if (!confirm(`Remover o login de "${name}"? O franqueado não conseguirá mais acessar o app.`)) return;
+    try {
+      const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.username !== username));
+        setUserMsg(`✓ Usuário "${name}" removido.`);
+      }
+    } catch { /* silencioso */ }
+  }
+
+  const tabStyle = (tab: "faq" | "pdfs" | "users") => ({
     padding: "8px 18px",
     borderRadius: "8px",
     fontWeight: 600,
@@ -181,19 +248,21 @@ export default function AdminPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 bg-white rounded-xl p-1.5 shadow-sm">
+        <div className="flex gap-2 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
           <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>
             📄 Condições Gerais
           </button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>
             💬 FAQ
           </button>
+          <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>
+            👥 Usuários
+          </button>
         </div>
 
         {/* ABA: PDFs */}
         {activeTab === "pdfs" && (
           <div>
-            {/* Upload */}
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
               <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
                 Adicionar nova seguradora
@@ -232,7 +301,6 @@ export default function AdminPage() {
               )}
             </div>
 
-            {/* Lista de PDFs */}
             <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
               Seguradoras indexadas {!loading && `(${pdfs.length})`}
             </h2>
@@ -355,6 +423,135 @@ export default function AdminPage() {
                         Remover
                       </button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Usuários */}
+        {activeTab === "users" && (
+          <div>
+            {/* Formulário de criação */}
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
+                Criar novo acesso
+              </h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Crie um login para cada franqueado. Eles usarão o usuário e senha para entrar no Piazinho.
+              </p>
+              <form onSubmit={handleCreateUser} className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                      Nome completo
+                    </label>
+                    <input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Ex: João Silva"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                      Usuário (login)
+                    </label>
+                    <input
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                      placeholder="Ex: joaosilva"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={newIsAdmin}
+                    onChange={(e) => setNewIsAdmin(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: "#B8975C" }}
+                  />
+                  <span className="text-xs text-gray-600">Dar permissão de administrador</span>
+                </label>
+                {userMsg && (
+                  <p
+                    className="text-xs px-3 py-2 rounded-lg"
+                    style={{
+                      background: userMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2",
+                      color: userMsg.startsWith("✓") ? "#16a34a" : "#dc2626",
+                    }}
+                  >
+                    {userMsg}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={savingUser || !newUsername.trim() || !newName.trim() || !newPassword}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
+                  style={{ background: "#B8975C" }}
+                >
+                  {savingUser ? "Criando..." : "Criar acesso"}
+                </button>
+              </form>
+            </div>
+
+            {/* Lista de usuários */}
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
+              Acessos cadastrados {!loading && `(${users.length})`}
+            </h2>
+            {loading ? (
+              <p className="text-sm text-gray-500">Carregando...</p>
+            ) : users.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum usuário cadastrado.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {users.map((u) => (
+                  <div key={u.username} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                        style={{ background: u.is_admin ? "rgba(184,151,92,0.2)" : "#EAE6DC", color: u.is_admin ? "#B8975C" : "#666" }}
+                      >
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{u.name}</p>
+                        <p className="text-xs text-gray-400">
+                          @{u.username}
+                          {u.is_admin && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>
+                              admin
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    {u.username !== "admin" && (
+                      <button
+                        onClick={() => handleDeleteUser(u.username, u.name)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
+                      >
+                        Remover
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
