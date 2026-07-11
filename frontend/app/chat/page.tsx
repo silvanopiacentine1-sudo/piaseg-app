@@ -21,6 +21,7 @@ export default function ChatPage() {
   const [token, setToken] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [showPortfolio, setShowPortfolio] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function ChatPage() {
 
   function sendPortfolioQuery(produto: string) {
     if (loading) return;
+    setShowPortfolio(false);
     const question = `Quais seguradoras aceitam seguro de ${produto}?`;
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     ask(question);
@@ -112,6 +114,12 @@ export default function ChatPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPortfolio(true)}
+            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+          >
+            📋 Portifólio
+          </button>
           {isAdmin && (
             <button
               onClick={() => router.push("/admin")}
@@ -234,39 +242,64 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Acesso rápido ao portifólio — sempre visível */}
-      <div
-        className="px-3 py-2 flex gap-2 overflow-x-auto flex-shrink-0 scrollbar-hide border-t"
-        style={{ background: "#F5F2EC", borderColor: "#EAE6DC" }}
-      >
-        <span className="flex-shrink-0 text-[10px] self-center font-semibold" style={{ color: "#9a7d4a" }}>
-          Portifólio:
-        </span>
-        {[
-          { emoji: "🚗", label: "Automóvel" },
-          { emoji: "🏠", label: "Residencial" },
-          { emoji: "🏢", label: "Empresarial" },
-          { emoji: "🚛", label: "Caminhão" },
-          { emoji: "🏍️", label: "Moto" },
-          { emoji: "✈️", label: "Viagem" },
-          { emoji: "🛡️", label: "Vida" },
-          { emoji: "🐾", label: "Animal" },
-          { emoji: "🚲", label: "Bike" },
-          { emoji: "🌊", label: "Náutico" },
-          { emoji: "😁", label: "Odontológico" },
-          { emoji: "💼", label: "D&O" },
-        ].map(({ emoji, label }) => (
-          <button
-            key={label}
-            onClick={() => sendPortfolioQuery(label)}
-            disabled={loading}
-            className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-50"
-            style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
+      {/* Modal do Portifólio */}
+      {showPortfolio && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setShowPortfolio(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-2xl px-5 pt-5 pb-8"
+            style={{ background: "white" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {emoji} {label}
-          </button>
-        ))}
-      </div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-bold text-sm" style={{ color: "#00213A" }}>📋 Portifólio de Produtos</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9a7d4a" }}>Toque em um produto para ver as seguradoras</p>
+              </div>
+              <button
+                onClick={() => setShowPortfolio(false)}
+                className="text-lg leading-none px-2 py-1 rounded-lg"
+                style={{ color: "#9a7d4a" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { emoji: "🚗", label: "Automóvel" },
+                { emoji: "🏠", label: "Residencial" },
+                { emoji: "🏢", label: "Empresarial" },
+                { emoji: "🚛", label: "Caminhão" },
+                { emoji: "🏍️", label: "Moto" },
+                { emoji: "✈️", label: "Viagem" },
+                { emoji: "🛡️", label: "Vida" },
+                { emoji: "🐾", label: "Animal" },
+                { emoji: "🚲", label: "Bike" },
+                { emoji: "🌊", label: "Náutico" },
+                { emoji: "😁", label: "Odontológico" },
+                { emoji: "💼", label: "D&O" },
+                { emoji: "🏭", label: "Engenharia" },
+                { emoji: "🚌", label: "RC Ônibus" },
+                { emoji: "🛡️", label: "Garantia" },
+              ].map(({ emoji, label }) => (
+                <button
+                  key={label}
+                  onClick={() => sendPortfolioQuery(label)}
+                  disabled={loading}
+                  className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-xs font-medium transition-colors disabled:opacity-50 active:scale-95"
+                  style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}
+                >
+                  <span className="text-xl">{emoji}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div

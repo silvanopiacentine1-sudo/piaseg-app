@@ -3,10 +3,16 @@ import os
 import re
 import sqlite3
 import threading
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
 import pypdf
+
+
+def _nfc(text: str) -> str:
+    """Normaliza para NFC — evita mismatch entre macOS (NFD) e constantes Python (NFC)."""
+    return unicodedata.normalize("NFC", text)
 
 _sync_lock = threading.Lock()
 
@@ -72,9 +78,13 @@ def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 
     conn = get_db()
     try:
         if source_filter:
+            # Testa NFC e NFD: macOS salva nomes de arquivo em NFD,
+            # mas constantes Python são NFC — comparação direta falharia.
+            sf_nfc = _nfc(source_filter)
+            sf_nfd = unicodedata.normalize("NFD", source_filter)
             rows = conn.execute(
-                "SELECT source, page, text FROM chunks WHERE text MATCH ? AND source = ? ORDER BY rank LIMIT ?",
-                (clean, source_filter, top_k)
+                "SELECT source, page, text FROM chunks WHERE text MATCH ? AND (source = ? OR source = ?) ORDER BY rank LIMIT ?",
+                (clean, sf_nfc, sf_nfd, top_k)
             ).fetchall()
         else:
             rows = conn.execute(
@@ -104,7 +114,7 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
                 end = min(start + chunk_size, len(text))
                 chunk = text[start:end].strip()
                 if len(chunk) > 50:
-                    chunks.append({"text": chunk, "source": pdf_path.name, "page": page_num})
+                    chunks.append({"text": chunk, "source": _nfc(pdf_path.name), "page": page_num})
                 start += chunk_size - overlap
     return chunks
 
