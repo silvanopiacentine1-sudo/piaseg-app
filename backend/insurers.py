@@ -51,14 +51,18 @@ def derive_display_name(filename: str) -> str:
     return cleaned or Path(filename).stem.strip()
 
 
+def _nfd(text: str) -> str:
+    return unicodedata.normalize("NFD", text)
+
+
 def discover_insurers() -> dict:
     if not PDF_FOLDER.exists():
         return {}
     try:
-        return {p.name: derive_display_name(p.name) for p in sorted(PDF_FOLDER.glob("*.pdf"))}
+        return {_nfc(p.name): derive_display_name(_nfc(p.name)) for p in sorted(PDF_FOLDER.glob("*.pdf"))}
     except (PermissionError, OSError):
         manifest = load_manifest()
-        return {name: derive_display_name(name) for name in manifest.keys()}
+        return {_nfc(name): derive_display_name(_nfc(name)) for name in manifest.keys()}
 
 
 def get_db() -> sqlite3.Connection:
@@ -157,17 +161,23 @@ def sync_index() -> list:
         if count == 0 and manifest:
             manifest = {}
 
-        needs_update = [p for p in pdf_files if manifest.get(p.name) != p.stat().st_mtime]
+        # Usa NFC como chave canônica; ignora entradas NFD antigas no manifest
+        needs_update = [
+            p for p in pdf_files
+            if manifest.get(_nfc(p.name)) != p.stat().st_mtime
+            and manifest.get(_nfd(p.name)) != p.stat().st_mtime
+        ]
         if not needs_update:
             return []
 
         conn = get_db()
         updated = []
         for pdf_path in needs_update:
-            key = pdf_path.name
+            key = _nfc(pdf_path.name)   # sempre NFC no banco e no manifest
             mtime = pdf_path.stat().st_mtime
 
-            conn.execute("DELETE FROM chunks WHERE source = ?", (key,))
+            # Remove chunks pela chave NFC e NFD (limpeza de dados antigos)
+            conn.execute("DELETE FROM chunks WHERE source = ? OR source = ?", (key, _nfd(key)))
             chunks = extract_chunks(pdf_path)
             if chunks:
                 conn.executemany(
@@ -175,6 +185,8 @@ def sync_index() -> list:
                     [(c["source"], str(c["page"]), c["text"]) for c in chunks],
                 )
 
+            # Remove entradas antigas NFD do manifest e salva NFC
+            manifest.pop(_nfd(key), None)
             manifest[key] = mtime
             updated.append(key)
 
@@ -187,17 +199,23 @@ def sync_index() -> list:
 
 
 def delete_pdf(filename: str) -> bool:
-    pdf_path = PDF_FOLDER / filename
+    # Tenta NFC primeiro; depois NFD (nome real no filesystem pode ser NFD)
+    pdf_path = PDF_FOLDER / _nfc(filename)
     if not pdf_path.exists():
-        return False
+        pdf_path = PDF_FOLDER / _nfd(filename)
+        if not pdf_path.exists():
+            return False
 
     conn = get_db()
-    conn.execute("DELETE FROM chunks WHERE source = ?", (filename,))
+    nfc_name = _nfc(filename)
+    nfd_name = _nfd(filename)
+    conn.execute("DELETE FROM chunks WHERE source = ? OR source = ?", (nfc_name, nfd_name))
     conn.commit()
     conn.close()
 
     manifest = load_manifest()
-    manifest.pop(filename, None)
+    manifest.pop(nfc_name, None)
+    manifest.pop(nfd_name, None)
     save_manifest(manifest)
 
     pdf_path.unlink()
