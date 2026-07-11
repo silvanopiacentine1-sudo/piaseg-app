@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users
-from insurers import PDF_FOLDER, derive_display_name, delete_pdf, sync_index
+from insurers import PDF_FOLDER, derive_display_name, delete_pdf, sync_index, load_manifest, get_db
 from rag import (
     add_faq_entry,
     answer as rag_answer,
@@ -183,8 +183,34 @@ def list_pdfs(user: dict = Depends(require_admin)):
     try:
         return sorted([p.name for p in PDF_FOLDER.glob("*.pdf")])
     except (PermissionError, OSError):
-        from insurers import load_manifest
         return sorted(load_manifest().keys())
+
+
+@app.get("/admin/index-status")
+def index_status(user: dict = Depends(require_admin)):
+    """Mostra quantos chunks cada PDF tem no banco."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY source"
+    ).fetchall()
+    conn.close()
+    indexed = {r[0]: r[1] for r in rows}
+    pdfs = []
+    if PDF_FOLDER.exists():
+        for p in sorted(PDF_FOLDER.glob("*.pdf")):
+            name = p.name
+            chunks = indexed.get(name, 0)
+            pdfs.append({"file": name, "chunks": chunks, "indexed": chunks > 0})
+    return {"pdfs": pdfs, "total_chunks": sum(indexed.values())}
+
+
+@app.post("/admin/reindex")
+def force_reindex(background_tasks: BackgroundTasks, user: dict = Depends(require_admin)):
+    """Limpa o manifest e força re-indexação de todos os PDFs."""
+    from insurers import save_manifest
+    save_manifest({})
+    background_tasks.add_task(_index_and_invalidate)
+    return {"ok": True, "message": "Re-indexação iniciada. Aguarde 30 segundos e tente novamente."}
 
 
 @app.get("/faq")
