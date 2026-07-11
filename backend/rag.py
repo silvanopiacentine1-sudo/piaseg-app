@@ -11,7 +11,9 @@ from insurers import DATA_DIR, discover_insurers, search_chunks
 
 FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 
-SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual especialista em seguros de automóvel da Piaseg Seguros Franchising.
+PORTFOLIO_FILENAME = "Portifólio de Produtos.pdf"
+
+SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual especialista em seguros da Piaseg Seguros Franchising.
 Responda as dúvidas dos franqueados com base APENAS no contexto fornecido (Perguntas Frequentes e Condições Gerais).
 Se houver uma resposta no bloco "Perguntas Frequentes Piaseg", priorize-a — ela é uma resposta oficial validada pela equipe da Piaseg.
 Se não houver, use as Condições Gerais da seguradora.
@@ -20,6 +22,70 @@ Cite a seguradora quando relevante e use linguagem simples, evitando jargões de
 Pode usar emojis com moderação para deixar a conversa mais leve.
 Se a informação não estiver em nenhum dos dois contextos, informe de forma gentil que não encontrou nos documentos disponíveis e sugira contato com o suporte interno da Piaseg.
 Responda sempre em português brasileiro."""
+
+PORTFOLIO_SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual da Piaseg Seguros Franchising.
+O usuário quer saber quais seguradoras trabalham com um determinado produto ou ramo de seguro.
+Com base no Portifólio de Produtos fornecido, liste de forma clara e organizada quais seguradoras aceitam o produto perguntado.
+Apresente as seguradoras em uma lista com marcadores (•).
+Se não encontrar o produto especificamente no contexto, informe isso de forma gentil.
+Responda sempre em português brasileiro."""
+
+_PORTFOLIO_STOPWORDS = {
+    "onde", "quais", "quem", "aceitação", "aceita", "seguradoras", "seguradora",
+    "seguro", "seguros", "para", "com", "que", "tem", "uma", "uns", "umas",
+    "qual", "trabalha", "trabalham", "faz", "fazem", "sobre", "tipo", "ramo",
+    "saber", "lista", "listar", "dizer", "quero", "duvida", "dúvida", "informação",
+}
+
+_PORTFOLIO_PATTERNS = [
+    r'onde tem aceita',
+    r'quais seguradoras',
+    r'quem aceita',
+    r'aceitação para',
+    r'aceita.*seguro',
+    r'quem faz seguro',
+    r'quais faz',
+    r'portif[oó]lio',
+    r'quem trabalha com',
+    r'quais trabalham',
+    r'que seguradoras',
+]
+
+
+def detect_portfolio_query(text: str) -> bool:
+    text_lower = text.lower()
+    return any(re.search(p, text_lower) for p in _PORTFOLIO_PATTERNS)
+
+
+def answer_portfolio(question: str) -> dict:
+    text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
+    terms = [w for w in text_clean.split() if w not in _PORTFOLIO_STOPWORDS and len(w) >= 2]
+
+    chunks = []
+    if terms:
+        fts_query = " OR ".join(terms)
+        chunks = search_chunks(fts_query, source_filter=PORTFOLIO_FILENAME, top_k=6)
+
+    if not chunks:
+        return {
+            "answer": "Não encontrei esse produto no Portifólio de Produtos. Verifique se o arquivo foi enviado no painel admin ou entre em contato com o suporte interno da Piaseg. 🙏",
+            "sources": [],
+        }
+
+    cg_block = "\n\n---\n\n".join([f"[Pág. {c['page']}]\n{c['text']}" for c in chunks])
+    context = f"### Portifólio de Produtos Piaseg\n\n{cg_block}"
+
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=PORTFOLIO_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": f"{context}\n\nPergunta: {question}"}],
+    )
+    return {
+        "answer": response.content[0].text,
+        "sources": [{"source": c["source"], "page": c["page"]} for c in chunks],
+    }
 
 
 def detect_insurer(text: str) -> Optional[str]:

@@ -79,6 +79,13 @@ export default function ChatPage() {
     ask(`${pendingQuestion} (seguradora: ${insurer})`);
   }
 
+  function sendPortfolioQuery(produto: string) {
+    if (loading) return;
+    const question = `Quais seguradoras aceitam seguro de ${produto}?`;
+    setMessages((prev) => [...prev, { role: "user", content: question }]);
+    ask(question);
+  }
+
   function logout() {
     localStorage.clear();
     router.replace("/");
@@ -206,9 +213,9 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Sugestões rápidas */}
+      {/* Sugestões rápidas — só na abertura */}
       {messages.length <= 1 && (
-        <div className="px-4 pb-2 flex gap-2 overflow-x-auto flex-shrink-0 scrollbar-hide">
+        <div className="px-4 pt-2 flex gap-2 overflow-x-auto flex-shrink-0 scrollbar-hide">
           {[
             "O que cobre em caso de roubo?",
             "Como funciona a perda total?",
@@ -226,6 +233,40 @@ export default function ChatPage() {
           ))}
         </div>
       )}
+
+      {/* Acesso rápido ao portifólio — sempre visível */}
+      <div
+        className="px-3 py-2 flex gap-2 overflow-x-auto flex-shrink-0 scrollbar-hide border-t"
+        style={{ background: "#F5F2EC", borderColor: "#EAE6DC" }}
+      >
+        <span className="flex-shrink-0 text-[10px] self-center font-semibold" style={{ color: "#9a7d4a" }}>
+          Portifólio:
+        </span>
+        {[
+          { emoji: "🚗", label: "Automóvel" },
+          { emoji: "🏠", label: "Residencial" },
+          { emoji: "🏢", label: "Empresarial" },
+          { emoji: "🚛", label: "Caminhão" },
+          { emoji: "🏍️", label: "Moto" },
+          { emoji: "✈️", label: "Viagem" },
+          { emoji: "🛡️", label: "Vida" },
+          { emoji: "🐾", label: "Animal" },
+          { emoji: "🚲", label: "Bike" },
+          { emoji: "🌊", label: "Náutico" },
+          { emoji: "😁", label: "Odontológico" },
+          { emoji: "💼", label: "D&O" },
+        ].map(({ emoji, label }) => (
+          <button
+            key={label}
+            onClick={() => sendPortfolioQuery(label)}
+            disabled={loading}
+            className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-50"
+            style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
+          >
+            {emoji} {label}
+          </button>
+        ))}
+      </div>
 
       {/* Input */}
       <div

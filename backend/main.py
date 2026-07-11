@@ -14,8 +14,10 @@ from insurers import PDF_FOLDER, derive_display_name, delete_pdf, sync_index
 from rag import (
     add_faq_entry,
     answer as rag_answer,
+    answer_portfolio,
     delete_faq_entry,
     detect_insurer,
+    detect_portfolio_query,
     get_insurer_display_name,
     get_insurer_options,
     invalidate_collection_cache,
@@ -111,6 +113,12 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Pergunta não pode ser vazia")
+
+    # Consultas de portifólio: "quais seguradoras aceitam X?" — busca no arquivo de portifólio
+    if detect_portfolio_query(question):
+        result = answer_portfolio(question)
+        result["needs_insurer"] = False
+        return result
 
     source_filter = detect_insurer(question)
     if not source_filter:
