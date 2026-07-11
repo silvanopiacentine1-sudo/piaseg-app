@@ -30,6 +30,7 @@ Regras de formato:
 - NÃO use saudação (não escreva "Olá", "Oi", apresentação ou introdução de nenhum tipo)
 - Liste cada seguradora em uma linha separada com asterisco: * Nome da Seguradora
 - Após a lista, se houver observações ou restrições no portifólio, inclua-as em texto simples
+- A última frase da resposta (o aviso/disclaimer sobre a relação não implicar aceitação garantida) deve sempre estar em negrito: **frase aqui**
 - Não use títulos com # nem linhas horizontais
 - Se não encontrar o produto, informe gentilmente sem saudação
 
