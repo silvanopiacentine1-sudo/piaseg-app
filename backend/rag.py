@@ -7,7 +7,7 @@ from typing import Optional
 
 import anthropic
 
-from insurers import DATA_DIR, discover_insurers, search_chunks
+from insurers import DATA_DIR, discover_insurers, find_portfolio_source, search_chunks
 
 FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 
@@ -63,13 +63,16 @@ def detect_portfolio_query(text: str) -> bool:
 
 
 def answer_portfolio(question: str) -> dict:
+    # Localiza o arquivo de portifólio dinamicamente (ignora variações de nome)
+    portfolio_source = find_portfolio_source() or PORTFOLIO_FILENAME
+
     text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
     terms = [w for w in text_clean.split() if w not in _PORTFOLIO_STOPWORDS and len(w) >= 2]
 
     chunks = []
     if terms:
         fts_query = " OR ".join(terms)
-        chunks = search_chunks(fts_query, source_filter=PORTFOLIO_FILENAME, top_k=6)
+        chunks = search_chunks(fts_query, source_filter=portfolio_source, top_k=6)
 
     if not chunks:
         return {

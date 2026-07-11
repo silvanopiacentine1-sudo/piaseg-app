@@ -198,6 +198,21 @@ def sync_index() -> list:
         _sync_lock.release()
 
 
+def find_portfolio_source() -> Optional[str]:
+    """Retorna o source exato do portifólio no banco, buscando por 'ortif' no nome."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT DISTINCT source FROM chunks WHERE source LIKE ? LIMIT 1",
+            ("%ortif%",)
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 def delete_pdf(filename: str) -> bool:
     # Tenta NFC primeiro; depois NFD (nome real no filesystem pode ser NFD)
     pdf_path = PDF_FOLDER / _nfc(filename)
