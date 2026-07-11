@@ -2,6 +2,54 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
+
+function parseBold(text: string): ReactNode {
+  if (!text.includes("**")) return <>{text}</>;
+  const parts = text.split(/(\*\*[^*]+\*\*)/);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**")
+          ? <strong key={i}>{part.slice(2, -2)}</strong>
+          : <span key={i}>{part}</span>
+      )}
+    </>
+  );
+}
+
+function renderMessage(text: string): ReactNode {
+  const lines = text.split("\n");
+  const result: ReactNode[] = [];
+  let listItems: string[] = [];
+  let idx = 0;
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    result.push(
+      <ul key={idx++} style={{ listStyleType: "disc", paddingLeft: "1.2rem", margin: "4px 0" }}>
+        {listItems.map((item, i) => (
+          <li key={i} style={{ marginBottom: "2px" }}>{parseBold(item)}</li>
+        ))}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) { flushList(); continue; }
+    const heading = t.match(/^#{1,3}\s+(.+)/);
+    if (heading) { flushList(); result.push(<strong key={idx++} style={{ display: "block", marginTop: "4px" }}>{parseBold(heading[1])}</strong>); continue; }
+    if (/^---+$/.test(t)) { flushList(); result.push(<div key={idx++} style={{ borderTop: "1px solid #EAE6DC", margin: "4px 0" }} />); continue; }
+    const li = t.match(/^[•*-]\s+(.+)/);
+    if (li) { listItems.push(li[1]); continue; }
+    flushList();
+    result.push(<span key={idx++} style={{ display: "block" }}>{parseBold(t)}</span>);
+  }
+  flushList();
+  return <>{result}</>;
+}
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -33,7 +81,7 @@ export default function ChatPage() {
     setIsAdmin(localStorage.getItem("piaseg_is_admin") === "1");
     setMessages([{
       role: "assistant",
-      content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o Piazinho, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
+      content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o **Piazinho**, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
     }]);
   }, [router]);
 
@@ -159,7 +207,7 @@ export default function ChatPage() {
                     : { background: "white", color: "#111", borderBottomLeftRadius: "4px" }
                 }
               >
-                {msg.content}
+                {msg.role === "assistant" ? renderMessage(msg.content) : msg.content}
               </div>
               {msg.sources && msg.sources.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
