@@ -59,6 +59,18 @@ _ASSISTANCE_STOPWORDS = {
     "24h", "24hs", "horas", "assistência", "assistências", "cobertura",
 }
 
+_GENERAL_STOPWORDS = {
+    "qual", "quais", "como", "quando", "onde", "porque", "por", "que",
+    "o", "a", "os", "as", "um", "uma", "uns", "umas",
+    "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+    "para", "com", "sem", "se", "ao", "aos", "à", "às",
+    "pelo", "pela", "pelos", "pelas", "sobre", "após", "entre", "até",
+    "é", "são", "tem", "há", "foi", "ser", "ter", "estar",
+    "eu", "me", "seu", "sua", "meu", "minha",
+    "mas", "ou", "e", "também", "já", "não", "sim", "só",
+    "mais", "muito", "bem", "aqui", "isso", "esse", "essa", "este", "esta",
+}
+
 _ASSISTANCE_PATTERNS = [
     r'assistência 24',
     r'assistências',
@@ -246,7 +258,10 @@ def search_faq(question: str, insurer_display: Optional[str] = None, n: int = 3)
 
 
 def answer(question: str, source_filter: Optional[str] = None, insurer_display: Optional[str] = None) -> dict:
-    chunks = search_chunks(question, source_filter=source_filter)
+    text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
+    terms = [w for w in text_clean.split() if w not in _GENERAL_STOPWORDS and len(w) >= 3]
+    search_query = " OR ".join(terms) if terms else question
+    chunks = search_chunks(search_query, source_filter=source_filter)
     faqs = search_faq(question, insurer_display=insurer_display)
 
     faq_block = "\n\n".join([f"P: {f['question']}\nR: {f['answer']}" for f in faqs])
