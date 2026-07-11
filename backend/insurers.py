@@ -29,6 +29,7 @@ except Exception:
 
 SEARCH_DB_PATH = str(DATA_DIR / "search.db")
 MANIFEST_PATH = DATA_DIR / "indexed_manifest.json"
+ESPECIAIS_FOLDER = Path(os.getenv("ESPECIAIS_FOLDER_PATH", str(DATA_DIR / "especiais")))
 
 KNOWN_DISPLAY_NAMES = {
     "HDI Auto perfil 2026.pdf": "HDI",
@@ -144,12 +145,16 @@ def sync_index() -> list:
             print(f"[sync_index] Não foi possível criar DATA_DIR ({DATA_DIR}): {e}")
             return []
 
-        if not PDF_FOLDER.exists():
-            return []
+        pdf_files = []
+        for folder in (PDF_FOLDER, ESPECIAIS_FOLDER):
+            if not folder.exists():
+                continue
+            try:
+                pdf_files += sorted(folder.glob("*.pdf"))
+            except (PermissionError, OSError):
+                pass
 
-        try:
-            pdf_files = sorted(PDF_FOLDER.glob("*.pdf"))
-        except (PermissionError, OSError):
+        if not pdf_files:
             return []
 
         manifest = load_manifest()
@@ -213,25 +218,53 @@ def find_portfolio_source() -> Optional[str]:
         conn.close()
 
 
-def delete_pdf(filename: str) -> bool:
-    # Tenta NFC primeiro; depois NFD (nome real no filesystem pode ser NFD)
-    pdf_path = PDF_FOLDER / _nfc(filename)
-    if not pdf_path.exists():
-        pdf_path = PDF_FOLDER / _nfd(filename)
-        if not pdf_path.exists():
-            return False
-
+def find_assistance_source() -> Optional[str]:
+    """Retorna o source exato do documento de assistências no banco."""
     conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT DISTINCT source FROM chunks WHERE source LIKE ? OR source LIKE ? LIMIT 1",
+            ("%ssistên%", "%24h%")
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def _delete_chunks_and_manifest(filename: str) -> None:
+    """Remove chunks do FTS5 e entradas do manifest para um arquivo."""
     nfc_name = _nfc(filename)
     nfd_name = _nfd(filename)
+    conn = get_db()
     conn.execute("DELETE FROM chunks WHERE source = ? OR source = ?", (nfc_name, nfd_name))
     conn.commit()
     conn.close()
-
     manifest = load_manifest()
     manifest.pop(nfc_name, None)
     manifest.pop(nfd_name, None)
     save_manifest(manifest)
 
+
+def delete_pdf(filename: str) -> bool:
+    pdf_path = PDF_FOLDER / _nfc(filename)
+    if not pdf_path.exists():
+        pdf_path = PDF_FOLDER / _nfd(filename)
+        if not pdf_path.exists():
+            return False
+    _delete_chunks_and_manifest(filename)
+    pdf_path.unlink()
+    return True
+
+
+def delete_especial(filename: str) -> bool:
+    """Remove arquivo da pasta especiais e desvincula do índice."""
+    pdf_path = ESPECIAIS_FOLDER / _nfc(filename)
+    if not pdf_path.exists():
+        pdf_path = ESPECIAIS_FOLDER / _nfd(filename)
+        if not pdf_path.exists():
+            return False
+    _delete_chunks_and_manifest(filename)
     pdf_path.unlink()
     return True

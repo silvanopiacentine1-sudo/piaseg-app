@@ -7,7 +7,7 @@ from typing import Optional
 
 import anthropic
 
-from insurers import DATA_DIR, discover_insurers, find_portfolio_source, search_chunks
+from insurers import DATA_DIR, discover_insurers, find_portfolio_source, find_assistance_source, search_chunks
 
 FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 
@@ -42,6 +42,44 @@ _PORTFOLIO_STOPWORDS = {
     "saber", "lista", "listar", "dizer", "quero", "duvida", "dúvida", "informação",
 }
 
+ASSISTANCE_SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual da Piaseg Seguros Franchising.
+Com base no documento de Assistências 24hs fornecido, responda de forma objetiva sobre o serviço solicitado.
+
+Regras de formato:
+- NÃO use saudação (não escreva "Olá", "Oi" ou apresentação de nenhum tipo)
+- Seja direto sobre coberturas, limites de km, franquias e condições
+- Se houver variações por seguradora ou plano, mencione-as claramente
+- Se não encontrar a informação, informe gentilmente sem saudação
+- Responda sempre em português brasileiro."""
+
+_ASSISTANCE_STOPWORDS = {
+    "como", "funciona", "qual", "quais", "o", "a", "de", "do", "da", "é", "são",
+    "tem", "há", "para", "sobre", "na", "nas", "no", "nos", "serviço", "serviços",
+    "24h", "24hs", "horas", "assistência", "assistências", "cobertura",
+}
+
+_ASSISTANCE_PATTERNS = [
+    r'assistência 24',
+    r'assistências',
+    r'guincho',
+    r'reboque',
+    r'pane (elétrica|mecânica|elétrica)',
+    r'socorro mecân',
+    r'pneu furado',
+    r'troca de pneu',
+    r'carro reserva',
+    r'veículo reserva',
+    r'chaveiro',
+    r'hotel.*sinistro',
+    r'hospedagem.*sinistro',
+    r'táxi.*sinistro',
+    r'transporte.*sinistro',
+    r'telemedicina',
+    r'reparo de vidro',
+    r'vidros.*assistência',
+    r'serviço.*24h',
+]
+
 _PORTFOLIO_PATTERNS = [
     r'onde tem aceita',
     r'quais seguradoras',
@@ -55,6 +93,49 @@ _PORTFOLIO_PATTERNS = [
     r'quais trabalham',
     r'que seguradoras',
 ]
+
+
+def detect_assistance_query(text: str) -> bool:
+    text_lower = text.lower()
+    return any(re.search(p, text_lower) for p in _ASSISTANCE_PATTERNS)
+
+
+def answer_assistance(question: str) -> dict:
+    assistance_source = find_assistance_source()
+    if not assistance_source:
+        return {
+            "answer": "Não encontrei o documento de Assistências 24hs. Verifique se o arquivo foi enviado na aba 'Especiais' do painel admin. 🙏",
+            "sources": [],
+        }
+
+    text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
+    terms = [w for w in text_clean.split() if w not in _ASSISTANCE_STOPWORDS and len(w) >= 3]
+
+    chunks = []
+    if terms:
+        fts_query = " OR ".join(terms)
+        chunks = search_chunks(fts_query, source_filter=assistance_source, top_k=6)
+
+    if not chunks:
+        return {
+            "answer": "Não encontrei informações sobre esse serviço no documento de Assistências 24hs. Tente descrever de outra forma ou entre em contato com o suporte interno da Piaseg. 🙏",
+            "sources": [],
+        }
+
+    cg_block = "\n\n---\n\n".join([f"[Pág. {c['page']}]\n{c['text']}" for c in chunks])
+    context = f"### Assistências 24hs Piaseg\n\n{cg_block}"
+
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=ASSISTANCE_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": f"{context}\n\nPergunta: {question}"}],
+    )
+    return {
+        "answer": response.content[0].text,
+        "sources": [{"source": c["source"], "page": c["page"]} for c in chunks],
+    }
 
 
 def detect_portfolio_query(text: str) -> bool:

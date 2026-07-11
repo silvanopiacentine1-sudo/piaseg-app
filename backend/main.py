@@ -10,12 +10,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users
-from insurers import PDF_FOLDER, derive_display_name, delete_pdf, sync_index, load_manifest, get_db
+from insurers import PDF_FOLDER, ESPECIAIS_FOLDER, derive_display_name, delete_pdf, delete_especial, sync_index, load_manifest, get_db
 from rag import (
     add_faq_entry,
     answer as rag_answer,
+    answer_assistance,
     answer_portfolio,
     delete_faq_entry,
+    detect_assistance_query,
     detect_insurer,
     detect_portfolio_query,
     get_insurer_display_name,
@@ -45,10 +47,11 @@ def _watch_pdf_folder():
 
 @app.on_event("startup")
 def on_startup():
-    try:
-        PDF_FOLDER.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(f"[startup] Aviso: não foi possível criar pasta de PDFs ({PDF_FOLDER}): {e}")
+    for folder in (PDF_FOLDER, ESPECIAIS_FOLDER):
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
     # sync_index() removido do startup: evita carregar o modelo ONNX duas vezes (512MB Render)
     # O watcher thread indexa novos PDFs após 60s do startup
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
@@ -114,9 +117,13 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     if not question:
         raise HTTPException(status_code=400, detail="Pergunta não pode ser vazia")
 
-    # Consultas de portifólio: "quais seguradoras aceitam X?" — busca no arquivo de portifólio
     if detect_portfolio_query(question):
         result = answer_portfolio(question)
+        result["needs_insurer"] = False
+        return result
+
+    if detect_assistance_query(question):
+        result = answer_assistance(question)
         result["needs_insurer"] = False
         return result
 
@@ -186,22 +193,70 @@ def list_pdfs(user: dict = Depends(require_admin)):
         return sorted(load_manifest().keys())
 
 
+@app.post("/admin/upload-especial")
+async def upload_especial(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_admin),
+):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são permitidos")
+    ESPECIAIS_FOLDER.mkdir(parents=True, exist_ok=True)
+    pdf_path = ESPECIAIS_FOLDER / file.filename
+    content = await file.read()
+    pdf_path.write_bytes(content)
+    background_tasks.add_task(_index_and_invalidate)
+    return {
+        "filename": file.filename,
+        "message": "Arquivo especial salvo. A indexação está sendo processada em background.",
+    }
+
+
+@app.get("/admin/especiais")
+def list_especiais(user: dict = Depends(require_admin)):
+    if not ESPECIAIS_FOLDER.exists():
+        return []
+    try:
+        return sorted([p.name for p in ESPECIAIS_FOLDER.glob("*.pdf")])
+    except (PermissionError, OSError):
+        return []
+
+
+@app.delete("/admin/especial/{filename}")
+def remove_especial(filename: str, user: dict = Depends(require_admin)):
+    if not delete_especial(filename):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    invalidate_collection_cache()
+    return {"ok": True}
+
+
 @app.get("/admin/index-status")
 def index_status(user: dict = Depends(require_admin)):
-    """Mostra quantos chunks cada PDF tem no banco."""
+    """Mostra quantos chunks cada PDF tem no banco, separado por pasta."""
     conn = get_db()
     rows = conn.execute(
         "SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY source"
     ).fetchall()
     conn.close()
     indexed = {r[0]: r[1] for r in rows}
-    pdfs = []
+
+    cg_pdfs = []
     if PDF_FOLDER.exists():
         for p in sorted(PDF_FOLDER.glob("*.pdf")):
-            name = p.name
-            chunks = indexed.get(name, 0)
-            pdfs.append({"file": name, "chunks": chunks, "indexed": chunks > 0})
-    return {"pdfs": pdfs, "total_chunks": sum(indexed.values())}
+            chunks = indexed.get(p.name, 0)
+            cg_pdfs.append({"file": p.name, "chunks": chunks, "indexed": chunks > 0})
+
+    esp_pdfs = []
+    if ESPECIAIS_FOLDER.exists():
+        for p in sorted(ESPECIAIS_FOLDER.glob("*.pdf")):
+            chunks = indexed.get(p.name, 0)
+            esp_pdfs.append({"file": p.name, "chunks": chunks, "indexed": chunks > 0})
+
+    return {
+        "condicoes_gerais": cg_pdfs,
+        "especiais": esp_pdfs,
+        "total_chunks": sum(indexed.values()),
+    }
 
 
 @app.post("/admin/reindex")

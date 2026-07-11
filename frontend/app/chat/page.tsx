@@ -70,6 +70,7 @@ export default function ChatPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [showAssistance, setShowAssistance] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -136,6 +137,14 @@ export default function ChatPage() {
     ask(question);
   }
 
+  function sendAssistanceQuery(servico: string) {
+    if (loading) return;
+    setShowAssistance(false);
+    const question = `Como funciona o serviço de ${servico} na assistência 24h?`;
+    setMessages((prev) => [...prev, { role: "user", content: question }]);
+    ask(question);
+  }
+
   function logout() {
     localStorage.clear();
     router.replace("/");
@@ -167,6 +176,12 @@ export default function ChatPage() {
             className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
           >
             📋 Portifólio
+          </button>
+          <button
+            onClick={() => setShowAssistance(true)}
+            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+          >
+            🛟 Assistência
           </button>
           {isAdmin && (
             <button
@@ -342,6 +357,62 @@ export default function ChatPage() {
                 >
                   <span className="text-xl">{emoji}</span>
                   <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Assistência 24h */}
+      {showAssistance && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setShowAssistance(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-2xl px-5 pt-5 pb-8"
+            style={{ background: "white" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-bold text-sm" style={{ color: "#00213A" }}>🛟 Assistência 24hs</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9a7d4a" }}>Toque em um serviço para ver a cobertura</p>
+              </div>
+              <button
+                onClick={() => setShowAssistance(false)}
+                className="text-lg leading-none px-2 py-1 rounded-lg"
+                style={{ color: "#9a7d4a" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { emoji: "🚚", label: "Guincho" },
+                { emoji: "⚡", label: "Pane Elétrica" },
+                { emoji: "🔧", label: "Pane Mecânica" },
+                { emoji: "🛞", label: "Pneu Furado" },
+                { emoji: "🔑", label: "Chaveiro" },
+                { emoji: "🪟", label: "Vidros/Cristais" },
+                { emoji: "🚗", label: "Carro Reserva" },
+                { emoji: "🏨", label: "Hospedagem" },
+                { emoji: "🚕", label: "Transporte" },
+                { emoji: "👨‍⚕️", label: "Telemedicina" },
+                { emoji: "🏠", label: "Assist. Residencial" },
+                { emoji: "🩺", label: "Orientação Médica" },
+              ].map(({ emoji, label }) => (
+                <button
+                  key={label}
+                  onClick={() => sendAssistanceQuery(label)}
+                  disabled={loading}
+                  className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-xs font-medium transition-colors disabled:opacity-50 active:scale-95"
+                  style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}
+                >
+                  <span className="text-xl">{emoji}</span>
+                  <span className="text-center leading-tight">{label}</span>
                 </button>
               ))}
             </div>

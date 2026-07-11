@@ -36,7 +36,12 @@ export default function AdminPage() {
   const [uploadMsg, setUploadMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "users">("pdfs");
+  const [especiais, setEspeciais] = useState<string[]>([]);
+  const [uploadingEspecial, setUploadingEspecial] = useState(false);
+  const [uploadEspecialMsg, setUploadEspecialMsg] = useState("");
+  const especialFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "users">("pdfs");
 
   // Users tab state
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -58,7 +63,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t)]);
     setLoading(false);
   }
 
@@ -74,6 +79,13 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${API}/admin/pdfs`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) setPdfs(await res.json());
+    } catch { /* silencioso */ }
+  }
+
+  async function loadEspeciais(t: string) {
+    try {
+      const res = await fetch(`${API}/admin/especiais`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setEspeciais(await res.json());
     } catch { /* silencioso */ }
   }
 
@@ -131,6 +143,46 @@ export default function AdminPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       await loadAll(token);
+    } catch { /* silencioso */ }
+  }
+
+  async function handleUploadEspecial(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setUploadEspecialMsg("Apenas arquivos PDF são permitidos.");
+      return;
+    }
+    setUploadingEspecial(true);
+    setUploadEspecialMsg("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${API}/admin/upload-especial`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) { setUploadEspecialMsg(data.detail ?? "Erro no upload."); return; }
+      setUploadEspecialMsg(`✓ "${file.name}" enviado. Indexação em andamento.`);
+      await loadEspeciais(token);
+    } catch {
+      setUploadEspecialMsg("Erro ao enviar o arquivo.");
+    } finally {
+      setUploadingEspecial(false);
+      if (especialFileInputRef.current) especialFileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeleteEspecial(filename: string) {
+    if (!confirm(`Remover "${filename}"?`)) return;
+    try {
+      await fetch(`${API}/admin/especial/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await loadEspeciais(token);
     } catch { /* silencioso */ }
   }
 
@@ -209,7 +261,7 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
-  const tabStyle = (tab: "faq" | "pdfs" | "users") => ({
+  const tabStyle = (tab: "faq" | "pdfs" | "especiais" | "users") => ({
     padding: "8px 18px",
     borderRadius: "8px",
     fontWeight: 600,
@@ -251,7 +303,10 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex gap-2 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
           <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>
-            📄 Condições Gerais
+            📄 Cond. Gerais
+          </button>
+          <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>
+            📋 Especiais
           </button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>
             💬 FAQ
@@ -324,6 +379,82 @@ export default function AdminPage() {
                     </div>
                     <button
                       onClick={() => handleDeletePdf(pdf)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Especiais */}
+        {activeTab === "especiais" && (
+          <div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
+                Documentos Especiais
+              </h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Portifólio de Produtos e Assistências 24hs ficam aqui, separados das Condições Gerais.
+              </p>
+              <label
+                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-8 cursor-pointer transition-colors"
+                style={{ borderColor: uploadingEspecial ? "#B8975C" : "#EAE6DC", background: "#F5F2EC" }}
+              >
+                <span className="text-3xl">📤</span>
+                <span className="text-sm font-medium" style={{ color: "#00213A" }}>
+                  {uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}
+                </span>
+                <span className="text-xs text-gray-400">Portifólio, Assistências, etc.</span>
+                <input
+                  ref={especialFileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  disabled={uploadingEspecial}
+                  onChange={handleUploadEspecial}
+                />
+              </label>
+              {uploadEspecialMsg && (
+                <p
+                  className="text-xs mt-3 px-3 py-2 rounded-lg"
+                  style={{
+                    background: uploadEspecialMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2",
+                    color: uploadEspecialMsg.startsWith("✓") ? "#16a34a" : "#dc2626",
+                  }}
+                >
+                  {uploadEspecialMsg}
+                </p>
+              )}
+            </div>
+
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
+              Arquivos especiais {!loading && `(${especiais.length})`}
+            </h2>
+            {loading ? (
+              <p className="text-sm text-gray-500">Carregando...</p>
+            ) : especiais.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum arquivo especial cadastrado ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {especiais.map((pdf) => (
+                  <div key={pdf} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">
+                        {pdf.toLowerCase().includes("ortif") ? "📋" : pdf.toLowerCase().includes("ssist") ? "🛟" : "📄"}
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>
+                          {pdf.replace(/\.pdf$/i, "")}
+                        </p>
+                        <p className="text-xs text-gray-400">{pdf}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteEspecial(pdf)}
                       className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
                     >
                       Remover
