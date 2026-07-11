@@ -95,13 +95,13 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function ask(question: string) {
+  async function ask(question: string, queryType: string = "general") {
     setLoading(true);
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, query_type: queryType }),
       });
       if (res.status === 401) { router.replace("/"); return; }
       const data = await res.json();
@@ -139,7 +139,7 @@ export default function ChatPage() {
     setShowPortfolio(false);
     const question = `Quais seguradoras aceitam seguro de ${produto}?`;
     setMessages((prev) => [...prev, { role: "user", content: question }]);
-    ask(question);
+    ask(question, "portfolio");
   }
 
   function sendAssistanceQuery(seguradora: string) {
@@ -147,7 +147,7 @@ export default function ChatPage() {
     setShowAssistance(false);
     const question = `Qual o telefone de assistência 24h da ${seguradora}?`;
     setMessages((prev) => [...prev, { role: "user", content: question }]);
-    ask(question);
+    ask(question, "assistance");
   }
 
   function logout() {

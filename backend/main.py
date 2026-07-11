@@ -87,6 +87,7 @@ class LoginRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
+    query_type: str = "general"  # "general" | "portfolio" | "assistance"
 
 
 class FaqEntry(BaseModel):
@@ -117,16 +118,17 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     if not question:
         raise HTTPException(status_code=400, detail="Pergunta não pode ser vazia")
 
-    if detect_portfolio_query(question):
+    if body.query_type == "portfolio":
         result = answer_portfolio(question)
         result["needs_insurer"] = False
         return result
 
-    if detect_assistance_query(question):
+    if body.query_type == "assistance":
         result = answer_assistance(question)
         result["needs_insurer"] = False
         return result
 
+    # Perguntas digitadas: busca sempre nas Condições Gerais + FAQ
     source_filter = detect_insurer(question)
     if not source_filter:
         return {
