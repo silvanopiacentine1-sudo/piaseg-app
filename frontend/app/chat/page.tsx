@@ -315,12 +315,12 @@ export default function ChatPage() {
       {/* Modal do Portifólio */}
       {showPortfolio && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
           style={{ background: "rgba(0,0,0,0.45)" }}
           onClick={() => setShowPortfolio(false)}
         >
           <div
-            className="w-full max-w-lg rounded-t-2xl px-5 pt-5 pb-8"
+            className="w-full max-w-lg rounded-2xl px-5 pt-5 pb-6"
             style={{ background: "white" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -374,12 +374,12 @@ export default function ChatPage() {
       {/* Modal de Assistência 24h */}
       {showAssistance && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
           style={{ background: "rgba(0,0,0,0.45)" }}
           onClick={() => setShowAssistance(false)}
         >
           <div
-            className="w-full max-w-lg rounded-t-2xl px-5 pt-5 pb-8"
+            className="w-full max-w-lg rounded-2xl px-5 pt-5 pb-6"
             style={{ background: "white" }}
             onClick={(e) => e.stopPropagation()}
           >
