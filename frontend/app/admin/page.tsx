@@ -51,6 +51,22 @@ export default function AdminPage() {
   const [newContactWhatsapp, setNewContactWhatsapp] = useState("");
   const [savingContact, setSavingContact] = useState(false);
   const [contactMsg, setContactMsg] = useState("");
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editContactName, setEditContactName] = useState("");
+  const [editContactPhone, setEditContactPhone] = useState("");
+  const [editContactWhatsapp, setEditContactWhatsapp] = useState("");
+
+  // FAQ edit state
+  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
+  const [editFaqInsurer, setEditFaqInsurer] = useState("");
+  const [editFaqQuestion, setEditFaqQuestion] = useState("");
+  const [editFaqAnswer, setEditFaqAnswer] = useState("");
+
+  // Users edit state
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserPassword, setEditUserPassword] = useState("");
+  const [editUserIsAdmin, setEditUserIsAdmin] = useState(false);
 
   // Users tab state
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -119,6 +135,17 @@ export default function AdminPage() {
     } finally {
       setSavingContact(false);
     }
+  }
+
+  async function handleSaveContact(id: string) {
+    try {
+      const res = await fetch(`${API}/admin/assistance/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: editContactName, phone: editContactPhone, whatsapp: editContactWhatsapp }),
+      });
+      if (res.ok) { setEditingContactId(null); await loadContacts(token); }
+    } catch { /* silencioso */ }
   }
 
   async function handleDeleteContact(id: string, name: string) {
@@ -256,6 +283,21 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSaveFaq(id: string) {
+    try {
+      const res = await fetch(`${API}/faq/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ insurer: editFaqInsurer, question: editFaqQuestion, answer: editFaqAnswer }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setItems((prev) => prev.map((i) => i.id === id ? updated : i));
+        setEditingFaqId(null);
+      }
+    } catch { /* silencioso */ }
+  }
+
   async function handleDelete(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
     try {
@@ -292,6 +334,22 @@ export default function AdminPage() {
     } finally {
       setSavingUser(false);
     }
+  }
+
+  async function handleSaveUser(username: string) {
+    try {
+      const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: editUserName, password: editUserPassword, is_admin: editUserIsAdmin }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setUsers((prev) => prev.map((u) => u.username === username ? { ...u, name: updated.name, is_admin: updated.is_admin } : u));
+        setEditingUsername(null);
+        setEditUserPassword("");
+      }
+    } catch { /* silencioso */ }
   }
 
   async function handleDeleteUser(username: string, name: string) {
@@ -592,24 +650,36 @@ export default function AdminPage() {
             ) : (
               <div className="flex flex-col gap-2">
                 {contacts.map((c) => (
-                  <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">📞</span>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{c.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {c.phone && `Tel: ${c.phone}`}
-                          {c.phone && c.whatsapp && " · "}
-                          {c.whatsapp && `WA: ${c.whatsapp}`}
-                        </p>
+                  <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3">
+                    {editingContactId === c.id ? (
+                      <div className="flex flex-col gap-2">
+                        <input value={editContactName} onChange={(e) => setEditContactName(e.target.value)} placeholder="Nome" className="px-3 py-2 rounded-lg border text-sm outline-none w-full" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={editContactPhone} onChange={(e) => setEditContactPhone(e.target.value)} placeholder="Telefone" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                          <input value={editContactWhatsapp} onChange={(e) => setEditContactWhatsapp(e.target.value)} placeholder="WhatsApp" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingContactId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                          <button onClick={() => handleSaveContact(c.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteContact(c.id, c.name)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
-                    >
-                      Remover
-                    </button>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg">📞</span>
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{c.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {c.phone && `Tel: ${c.phone}`}{c.phone && c.whatsapp && " · "}{c.whatsapp && `WA: ${c.whatsapp}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => { setEditingContactId(c.id); setEditContactName(c.name); setEditContactPhone(c.phone); setEditContactWhatsapp(c.whatsapp); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          <button onClick={() => handleDeleteContact(c.id, c.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -688,24 +758,31 @@ export default function AdminPage() {
               <div className="flex flex-col gap-3">
                 {items.map((item) => (
                   <div key={item.id} className="bg-white rounded-2xl shadow-sm p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block mb-2"
-                          style={{ background: "#EAE6DC", color: "#9a7d4a" }}
-                        >
-                          {item.insurer}
-                        </span>
-                        <p className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>{item.question}</p>
-                        <p className="text-sm text-gray-600 leading-relaxed">{item.answer}</p>
+                    {editingFaqId === item.id ? (
+                      <div className="flex flex-col gap-2">
+                        <select value={editFaqInsurer} onChange={(e) => setEditFaqInsurer(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                          {insurerOptions.map((i) => <option key={i} value={i}>{i}</option>)}
+                        </select>
+                        <input value={editFaqQuestion} onChange={(e) => setEditFaqQuestion(e.target.value)} placeholder="Pergunta" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <textarea value={editFaqAnswer} onChange={(e) => setEditFaqAnswer(e.target.value)} rows={3} placeholder="Resposta" className="px-3 py-2 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingFaqId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                          <button onClick={() => handleSaveFaq(item.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
-                      >
-                        Remover
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block mb-2" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>{item.insurer}</span>
+                          <p className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>{item.question}</p>
+                          <p className="text-sm text-gray-600 leading-relaxed">{item.answer}</p>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => { setEditingFaqId(item.id); setEditFaqInsurer(item.insurer); setEditFaqQuestion(item.question); setEditFaqAnswer(item.answer); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          <button onClick={() => handleDelete(item.id)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -807,33 +884,36 @@ export default function AdminPage() {
             ) : (
               <div className="flex flex-col gap-2">
                 {users.map((u) => (
-                  <div key={u.username} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                        style={{ background: u.is_admin ? "rgba(184,151,92,0.2)" : "#EAE6DC", color: u.is_admin ? "#B8975C" : "#666" }}
-                      >
-                        {u.name.charAt(0).toUpperCase()}
+                  <div key={u.username} className="bg-white rounded-xl shadow-sm px-4 py-3">
+                    {editingUsername === u.username ? (
+                      <div className="flex flex-col gap-2">
+                        <input value={editUserName} onChange={(e) => setEditUserName(e.target.value)} placeholder="Nome completo" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <input type="password" value={editUserPassword} onChange={(e) => setEditUserPassword(e.target.value)} placeholder="Nova senha (deixe em branco para manter)" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
+                          <input type="checkbox" checked={editUserIsAdmin} onChange={(e) => setEditUserIsAdmin(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: "#B8975C" }} />
+                          Administrador
+                        </label>
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => { setEditingUsername(null); setEditUserPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                          <button onClick={() => handleSaveUser(u.username)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{u.name}</p>
-                        <p className="text-xs text-gray-400">
-                          @{u.username}
-                          {u.is_admin && (
-                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>
-                              admin
-                            </span>
-                          )}
-                        </p>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: u.is_admin ? "rgba(184,151,92,0.2)" : "#EAE6DC", color: u.is_admin ? "#B8975C" : "#666" }}>
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{u.name}</p>
+                            <p className="text-xs text-gray-400">@{u.username}{u.is_admin && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>admin</span>}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => { setEditingUsername(u.username); setEditUserName(u.name); setEditUserIsAdmin(u.is_admin); setEditUserPassword(""); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          {u.username !== "admin" && <button onClick={() => handleDeleteUser(u.username, u.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>}
+                        </div>
                       </div>
-                    </div>
-                    {u.username !== "admin" && (
-                      <button
-                        onClick={() => handleDeleteUser(u.username, u.name)}
-                        className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
-                      >
-                        Remover
-                      </button>
                     )}
                   </div>
                 ))}

@@ -242,6 +242,16 @@ def delete_faq_entry(faq_id: str) -> None:
     save_faq(data)
 
 
+def update_faq_entry(faq_id: str, insurer: str, question: str, answer_text: str) -> Optional[dict]:
+    data = load_faq()
+    for i, e in enumerate(data):
+        if e["id"] == faq_id:
+            data[i] = {**e, "insurer": insurer, "question": question, "answer": answer_text}
+            save_faq(data)
+            return data[i]
+    return None
+
+
 def search_faq(question: str, insurer_display: Optional[str] = None, n: int = 3) -> list:
     data = load_faq()
     if insurer_display:

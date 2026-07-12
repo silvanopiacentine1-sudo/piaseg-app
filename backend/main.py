@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users
+from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users, update_user
 import json
 import uuid
 
@@ -27,6 +27,7 @@ from rag import (
     get_insurer_options,
     invalidate_collection_cache,
     load_faq,
+    update_faq_entry,
 )
 
 app = FastAPI(title="Piaseg Seguros API")
@@ -304,6 +305,14 @@ def create_faq_entry(body: FaqEntry, user: dict = Depends(require_admin)):
     return add_faq_entry(body.insurer, body.question.strip(), body.answer.strip())
 
 
+@app.put("/faq/{faq_id}")
+def edit_faq_entry(faq_id: str, body: FaqEntry, user: dict = Depends(require_admin)):
+    updated = update_faq_entry(faq_id, body.insurer, body.question.strip(), body.answer.strip())
+    if not updated:
+        raise HTTPException(status_code=404, detail="FAQ não encontrado")
+    return updated
+
+
 @app.delete("/faq/{faq_id}")
 def remove_faq_entry(faq_id: str, user: dict = Depends(require_admin)):
     delete_faq_entry(faq_id)
@@ -326,6 +335,27 @@ def create_user_endpoint(body: UserCreate, user: dict = Depends(require_admin)):
         return create_user(body.username.strip(), body.name.strip(), body.password, body.is_admin)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+class UserUpdate(BaseModel):
+    name: str
+    password: str = ""
+    is_admin: bool = False
+
+
+@app.put("/admin/users/{username}")
+def update_user_endpoint(username: str, body: UserUpdate, current_user: dict = Depends(require_admin)):
+    if username == "admin" and not body.is_admin:
+        raise HTTPException(status_code=400, detail="Não é possível remover permissão admin do usuário admin")
+    updated = update_user(
+        username,
+        name=body.name.strip() or None,
+        password=body.password or None,
+        is_admin=body.is_admin,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return updated
 
 
 @app.delete("/admin/users/{username}")
@@ -351,6 +381,17 @@ def create_assistance(body: AssistanceContact, user: dict = Depends(require_admi
     data.append(entry)
     _save_assistance(data)
     return entry
+
+
+@app.put("/admin/assistance/{contact_id}")
+def update_assistance(contact_id: str, body: AssistanceContact, user: dict = Depends(require_admin)):
+    data = _load_assistance()
+    for i, c in enumerate(data):
+        if c["id"] == contact_id:
+            data[i] = {**c, "name": body.name.strip(), "phone": body.phone.strip(), "whatsapp": body.whatsapp.strip()}
+            _save_assistance(data)
+            return data[i]
+    raise HTTPException(status_code=404, detail="Contato não encontrado")
 
 
 @app.delete("/admin/assistance/{contact_id}")

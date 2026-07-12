@@ -79,6 +79,21 @@ def create_user(username: str, name: str, password: str, is_admin: bool = False)
     return {"username": username, "name": name, "is_admin": is_admin}
 
 
+def update_user(username: str, name: Optional[str] = None, password: Optional[str] = None, is_admin: Optional[bool] = None) -> Optional[dict]:
+    users = load_users()
+    for u in users:
+        if u["username"] == username:
+            if name is not None:
+                u["name"] = name
+            if password:
+                u["password_hash"] = hash_password(password)
+            if is_admin is not None:
+                u["is_admin"] = is_admin
+            save_users(users)
+            return {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False)}
+    return None
+
+
 def delete_user(username: str) -> bool:
     users = load_users()
     filtered = [u for u in users if u["username"] != username]
