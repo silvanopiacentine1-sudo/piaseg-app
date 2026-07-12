@@ -10,7 +10,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users
-from insurers import PDF_FOLDER, ESPECIAIS_FOLDER, derive_display_name, delete_pdf, delete_especial, sync_index, load_manifest, get_db
+import json
+import uuid
+
+from insurers import PDF_FOLDER, ESPECIAIS_FOLDER, DATA_DIR, derive_display_name, delete_pdf, delete_especial, sync_index, load_manifest, get_db
 from rag import (
     add_faq_entry,
     answer as rag_answer,
@@ -27,6 +30,19 @@ from rag import (
 )
 
 app = FastAPI(title="Piaseg Seguros API")
+
+ASSISTANCE_JSON_PATH = DATA_DIR / "assistance_contacts.json"
+
+
+def _load_assistance() -> list:
+    if not ASSISTANCE_JSON_PATH.exists():
+        return []
+    return json.loads(ASSISTANCE_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_assistance(data: list) -> None:
+    ASSISTANCE_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ASSISTANCE_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 PDF_WATCH_INTERVAL_SECONDS = 120
 
@@ -101,6 +117,12 @@ class UserCreate(BaseModel):
     name: str
     password: str
     is_admin: bool = False
+
+
+class AssistanceContact(BaseModel):
+    name: str
+    phone: str
+    whatsapp: str = ""
 
 
 @app.post("/auth/login")
@@ -312,6 +334,32 @@ def delete_user_endpoint(username: str, current_user: dict = Depends(require_adm
         raise HTTPException(status_code=400, detail="Não é possível remover o usuário admin")
     if not delete_user(username):
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return {"ok": True}
+
+
+@app.get("/assistance")
+def list_assistance(user: dict = Depends(get_current_user)):
+    return _load_assistance()
+
+
+@app.post("/admin/assistance", status_code=201)
+def create_assistance(body: AssistanceContact, user: dict = Depends(require_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Nome é obrigatório")
+    data = _load_assistance()
+    entry = {"id": f"ast_{uuid.uuid4().hex[:8]}", "name": body.name.strip(), "phone": body.phone.strip(), "whatsapp": body.whatsapp.strip()}
+    data.append(entry)
+    _save_assistance(data)
+    return entry
+
+
+@app.delete("/admin/assistance/{contact_id}")
+def delete_assistance(contact_id: str, user: dict = Depends(require_admin)):
+    data = _load_assistance()
+    new_data = [c for c in data if c["id"] != contact_id]
+    if len(new_data) == len(data):
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    _save_assistance(new_data)
     return {"ok": True}
 
 

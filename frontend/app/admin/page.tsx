@@ -41,7 +41,16 @@ export default function AdminPage() {
   const [uploadEspecialMsg, setUploadEspecialMsg] = useState("");
   const especialFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "users">("pdfs");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users">("pdfs");
+
+  // Assistance tab state
+  interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
+  const [contacts, setContacts] = useState<AssistanceContact[]>([]);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactWhatsapp, setNewContactWhatsapp] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactMsg, setContactMsg] = useState("");
 
   // Users tab state
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -63,7 +72,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t)]);
     setLoading(false);
   }
 
@@ -79,6 +88,44 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${API}/admin/pdfs`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) setPdfs(await res.json());
+    } catch { /* silencioso */ }
+  }
+
+  async function loadContacts(t: string) {
+    try {
+      const res = await fetch(`${API}/assistance`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setContacts(await res.json());
+    } catch { /* silencioso */ }
+  }
+
+  async function handleCreateContact(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newContactName.trim()) return;
+    setSavingContact(true);
+    setContactMsg("");
+    try {
+      const res = await fetch(`${API}/admin/assistance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newContactName.trim(), phone: newContactPhone.trim(), whatsapp: newContactWhatsapp.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setContactMsg(`Erro: ${data.detail ?? "Não foi possível salvar."}`); return; }
+      setContactMsg(`✓ "${data.name}" adicionado.`);
+      setNewContactName(""); setNewContactPhone(""); setNewContactWhatsapp("");
+      await loadContacts(token);
+    } catch {
+      setContactMsg("Erro ao conectar ao servidor.");
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  async function handleDeleteContact(id: string, name: string) {
+    if (!confirm(`Remover "${name}"?`)) return;
+    try {
+      const res = await fetch(`${API}/admin/assistance/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setContacts((prev) => prev.filter((c) => c.id !== id)); setContactMsg(`✓ "${name}" removido.`); }
     } catch { /* silencioso */ }
   }
 
@@ -261,7 +308,7 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
-  const tabStyle = (tab: "faq" | "pdfs" | "especiais" | "users") => ({
+  const tabStyle = (tab: "faq" | "pdfs" | "especiais" | "assistance" | "users") => ({
     padding: "8px 18px",
     borderRadius: "8px",
     fontWeight: 600,
@@ -307,6 +354,9 @@ export default function AdminPage() {
           </button>
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>
             📋 Especiais
+          </button>
+          <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>
+            🛟 Assistência
           </button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>
             💬 FAQ
@@ -455,6 +505,107 @@ export default function AdminPage() {
                     </div>
                     <button
                       onClick={() => handleDeleteEspecial(pdf)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Assistência */}
+        {activeTab === "assistance" && (
+          <div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
+                Adicionar seguradora
+              </h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Cadastre o nome, telefone e WhatsApp de assistência 24hs de cada seguradora.
+              </p>
+              <form onSubmit={handleCreateContact} className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                    Nome da Seguradora
+                  </label>
+                  <input
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    placeholder="Ex: Allianz"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                      Telefone
+                    </label>
+                    <input
+                      value={newContactPhone}
+                      onChange={(e) => setNewContactPhone(e.target.value)}
+                      placeholder="Ex: 0800 013 0700"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
+                      WhatsApp
+                    </label>
+                    <input
+                      value={newContactWhatsapp}
+                      onChange={(e) => setNewContactWhatsapp(e.target.value)}
+                      placeholder="Ex: 11 99999-9999"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
+                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
+                    />
+                  </div>
+                </div>
+                {contactMsg && (
+                  <p className="text-xs px-3 py-2 rounded-lg"
+                    style={{ background: contactMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: contactMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                    {contactMsg}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={savingContact || !newContactName.trim()}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
+                  style={{ background: "#B8975C" }}
+                >
+                  {savingContact ? "Salvando..." : "Adicionar"}
+                </button>
+              </form>
+            </div>
+
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
+              Seguradoras cadastradas {!loading && `(${contacts.length})`}
+            </h2>
+            {loading ? (
+              <p className="text-sm text-gray-500">Carregando...</p>
+            ) : contacts.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhuma seguradora cadastrada ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {contacts.map((c) => (
+                  <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">📞</span>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{c.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {c.phone && `Tel: ${c.phone}`}
+                          {c.phone && c.whatsapp && " · "}
+                          {c.whatsapp && `WA: ${c.whatsapp}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteContact(c.id, c.name)}
                       className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
                     >
                       Remover

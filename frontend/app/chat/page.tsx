@@ -71,7 +71,7 @@ export default function ChatPage() {
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
-  const [assistanceInsurers, setAssistanceInsurers] = useState<string[]>([]);
+  const [assistanceContacts, setAssistanceContacts] = useState<{id: string; name: string; phone: string; whatsapp: string}[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,9 +81,9 @@ export default function ChatPage() {
     setToken(t);
     setUserName(n ?? "");
     setIsAdmin(localStorage.getItem("piaseg_is_admin") === "1");
-    fetch(`${API}/insurers`, { headers: { Authorization: `Bearer ${t}` } })
+    fetch(`${API}/assistance`, { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json())
-      .then((list: string[]) => setAssistanceInsurers(list))
+      .then((list) => setAssistanceContacts(list))
       .catch(() => {});
     setMessages([{
       role: "assistant",
@@ -142,12 +142,14 @@ export default function ChatPage() {
     ask(question, "portfolio");
   }
 
-  function sendAssistanceQuery(seguradora: string) {
+  function showAssistanceContact(contact: {name: string; phone: string; whatsapp: string}) {
     if (loading) return;
     setShowAssistance(false);
-    const question = `Qual o telefone de assistência 24h da ${seguradora}?`;
-    setMessages((prev) => [...prev, { role: "user", content: question }]);
-    ask(question, "assistance");
+    setMessages((prev) => [...prev, { role: "user", content: `Assistência 24hs — ${contact.name}` }]);
+    const lines: string[] = [`**${contact.name}** — Assistência 24hs`];
+    if (contact.phone) lines.push(`📞 Telefone: ${contact.phone}`);
+    if (contact.whatsapp) lines.push(`💬 WhatsApp: ${contact.whatsapp}`);
+    setMessages((prev) => [...prev, { role: "assistant", content: lines.join("\n") }]);
   }
 
   function logout() {
@@ -394,22 +396,22 @@ export default function ChatPage() {
                 ✕
               </button>
             </div>
-            {assistanceInsurers.length === 0 ? (
+            {assistanceContacts.length === 0 ? (
               <p className="text-sm text-center py-4" style={{ color: "#9a7d4a" }}>
-                Carregando seguradoras...
+                Nenhuma seguradora cadastrada ainda. Adicione pelo painel admin.
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
-                {assistanceInsurers.map((name) => (
+                {assistanceContacts.map((c) => (
                   <button
-                    key={name}
-                    onClick={() => sendAssistanceQuery(name)}
+                    key={c.id}
+                    onClick={() => showAssistanceContact(c)}
                     disabled={loading}
                     className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-xs font-medium transition-colors disabled:opacity-50 active:scale-95"
                     style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}
                   >
                     <span className="text-xl">📞</span>
-                    <span className="text-center leading-tight">{name}</span>
+                    <span className="text-center leading-tight">{c.name}</span>
                   </button>
                 ))}
               </div>
