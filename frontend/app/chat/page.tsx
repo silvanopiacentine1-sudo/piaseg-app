@@ -83,7 +83,7 @@ export default function ChatPage() {
     setIsAdmin(localStorage.getItem("piaseg_is_admin") === "1");
     fetch(`${API}/assistance`, { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json())
-      .then((list) => setAssistanceContacts(list))
+      .then((list) => setAssistanceContacts(Array.isArray(list) ? list : []))
       .catch(() => {});
     setMessages([{
       role: "assistant",
