@@ -1,12 +1,19 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import smtplib
 import threading
 import time
+from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fpdf import FPDF
 from pydantic import BaseModel
 
 from auth import authenticate, create_token, decode_token, create_user, delete_user, load_users, update_user
@@ -33,6 +40,7 @@ from rag import (
 app = FastAPI(title="Piaseg Seguros API")
 
 ASSISTANCE_JSON_PATH = DATA_DIR / "assistance_contacts.json"
+QUIVER_JSON_PATH = DATA_DIR / "quiver_links.json"
 
 
 def _load_assistance() -> list:
@@ -44,6 +52,110 @@ def _load_assistance() -> list:
 def _save_assistance(data: list) -> None:
     ASSISTANCE_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     ASSISTANCE_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_quiver() -> list:
+    if not QUIVER_JSON_PATH.exists():
+        return []
+    return json.loads(QUIVER_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_quiver(data: list) -> None:
+    QUIVER_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    QUIVER_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _safe_text(text: str) -> str:
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _strip_md(text: str) -> str:
+    import re
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[•*-]\s+', '- ', text, flags=re.MULTILINE)
+    return text.strip()
+
+
+def _generate_pdf(messages: list, user_name: str) -> bytes:
+    pdf = FPDF()
+    pdf.set_margins(15, 15, 15)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(0, 33, 58)
+    pdf.cell(0, 8, "Piazinho - Assistente Virtual Piaseg", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(130, 130, 130)
+    pdf.cell(0, 5, _safe_text(f"Conversa de {user_name} - {datetime.now().strftime('%d/%m/%Y as %H:%M')}"), ln=True, align="C")
+    pdf.ln(3)
+    pdf.set_draw_color(184, 151, 92)
+    pdf.set_line_width(0.5)
+    pdf.line(15, pdf.get_y(), pdf.w - 15, pdf.get_y())
+    pdf.ln(5)
+
+    for msg in messages:
+        clean = _safe_text(_strip_md(msg.content))
+        if not clean:
+            continue
+        if msg.role == "user":
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_text_color(184, 151, 92)
+            pdf.cell(0, 4, "VOCE:", ln=True)
+            pdf.set_fill_color(240, 237, 230)
+        else:
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_text_color(0, 33, 58)
+            pdf.cell(0, 4, "PIAZINHO:", ln=True)
+            pdf.set_fill_color(249, 248, 244)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(17, 17, 17)
+        pdf.multi_cell(0, 5, clean, fill=True, border=0)
+        pdf.ln(3)
+
+    return bytes(pdf.output())
+
+
+def _send_email_pdf(to_email: str, user_name: str, pdf_bytes: bytes) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    email_from = os.getenv("EMAIL_FROM", smtp_user)
+
+    if not smtp_host or not smtp_user or not smtp_pass:
+        raise HTTPException(
+            status_code=503,
+            detail="Configuracao de e-mail nao definida no servidor. Configure SMTP_HOST, SMTP_USER e SMTP_PASS."
+        )
+
+    msg = MIMEMultipart("mixed")
+    msg["From"] = f"Piazinho Piaseg <{email_from}>"
+    msg["To"] = to_email
+    msg["Subject"] = _safe_text(f"Sua conversa com o Piazinho - {datetime.now().strftime('%d/%m/%Y')}")
+
+    html_body = (
+        f"<html><body style='font-family:Arial,sans-serif;color:#111;line-height:1.6'>"
+        f"<p>Ola, <strong>{user_name}</strong>!</p>"
+        f"<p>Segue em anexo o historico da sua conversa com o <strong>Piazinho</strong>, "
+        f"assistente virtual da Piaseg Seguros Franchising.</p>"
+        f"<p>Qualquer duvida, entre em contato com a equipe Piaseg.</p>"
+        f"<br><p>Atenciosamente,<br><strong>Piaseg Seguros Franchising</strong></p>"
+        f"</body></html>"
+    )
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    att = MIMEBase("application", "pdf")
+    att.set_payload(pdf_bytes)
+    encoders.encode_base64(att)
+    filename = f"conversa-piazinho-{datetime.now().strftime('%Y%m%d')}.pdf"
+    att.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(att)
+
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(email_from, to_email, msg.as_string())
 
 PDF_WATCH_INTERVAL_SECONDS = 120
 
@@ -126,13 +238,27 @@ class AssistanceContact(BaseModel):
     whatsapp: str = ""
 
 
+class QuiverLink(BaseModel):
+    name: str
+    url: str
+
+
+class ConversationMessage(BaseModel):
+    role: str
+    content: str
+
+
+class SendEmailRequest(BaseModel):
+    messages: list[ConversationMessage]
+
+
 @app.post("/auth/login")
 def login(body: LoginRequest):
     user = authenticate(body.username, body.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha incorretos")
     token = create_token(user["username"], user["name"], user.get("is_admin", False))
-    return {"token": token, "name": user["name"], "is_admin": user.get("is_admin", False)}
+    return {"token": token, "name": user["name"], "is_admin": user.get("is_admin", False), "username": user["username"]}
 
 
 @app.post("/chat")
@@ -402,6 +528,59 @@ def delete_assistance(contact_id: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Contato não encontrado")
     _save_assistance(new_data)
     return {"ok": True}
+
+
+@app.get("/quiver")
+def list_quiver(user: dict = Depends(get_current_user)):
+    return _load_quiver()
+
+
+@app.post("/admin/quiver", status_code=201)
+def create_quiver(body: QuiverLink, user: dict = Depends(require_admin)):
+    if not body.name.strip() or not body.url.strip():
+        raise HTTPException(status_code=400, detail="Nome e URL são obrigatórios")
+    data = _load_quiver()
+    entry = {"id": f"qvr_{uuid.uuid4().hex[:8]}", "name": body.name.strip(), "url": body.url.strip()}
+    data.append(entry)
+    _save_quiver(data)
+    return entry
+
+
+@app.put("/admin/quiver/{link_id}")
+def update_quiver(link_id: str, body: QuiverLink, user: dict = Depends(require_admin)):
+    data = _load_quiver()
+    for i, lnk in enumerate(data):
+        if lnk["id"] == link_id:
+            data[i] = {**lnk, "name": body.name.strip(), "url": body.url.strip()}
+            _save_quiver(data)
+            return data[i]
+    raise HTTPException(status_code=404, detail="Link não encontrado")
+
+
+@app.delete("/admin/quiver/{link_id}")
+def delete_quiver(link_id: str, user: dict = Depends(require_admin)):
+    data = _load_quiver()
+    new_data = [lnk for lnk in data if lnk["id"] != link_id]
+    if len(new_data) == len(data):
+        raise HTTPException(status_code=404, detail="Link não encontrado")
+    _save_quiver(new_data)
+    return {"ok": True}
+
+
+@app.post("/chat/send-email")
+def send_conversation_email(body: SendEmailRequest, user: dict = Depends(get_current_user)):
+    user_email = user["username"]
+    user_name = user["name"]
+    if "@" not in user_email:
+        raise HTTPException(status_code=400, detail="Este usuário não tem e-mail cadastrado.")
+    try:
+        pdf_bytes = _generate_pdf(body.messages, user_name)
+        _send_email_pdf(user_email, user_name, pdf_bytes)
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao enviar e-mail: {str(e)}")
 
 
 @app.get("/health")

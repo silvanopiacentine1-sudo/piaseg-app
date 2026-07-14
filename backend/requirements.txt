@@ -7,3 +7,4 @@ bcrypt==4.0.1
 python-dotenv==1.1.0
 pypdf==5.1.0
 python-multipart==0.0.20
+fpdf2==2.7.9

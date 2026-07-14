@@ -27,10 +27,11 @@ export default function LoginPage() {
         setError(data.detail ?? "Usuário ou senha incorretos");
         return;
       }
-      const { token, name, is_admin } = await res.json();
+      const { token, name, is_admin, username } = await res.json();
       localStorage.setItem("piaseg_token", token);
       localStorage.setItem("piaseg_name", name);
       localStorage.setItem("piaseg_is_admin", is_admin ? "1" : "0");
+      localStorage.setItem("piaseg_username", username ?? "");
       router.push("/chat");
     } catch {
       setError("Não foi possível conectar ao servidor.");

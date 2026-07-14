@@ -18,6 +18,12 @@ interface UserItem {
   is_admin: boolean;
 }
 
+interface QuiverItem {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -41,7 +47,7 @@ export default function AdminPage() {
   const [uploadEspecialMsg, setUploadEspecialMsg] = useState("");
   const especialFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users">("pdfs");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver">("pdfs");
 
   // Assistance tab state
   interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
@@ -77,6 +83,16 @@ export default function AdminPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [userMsg, setUserMsg] = useState("");
 
+  // Quiver tab state
+  const [quiverLinks, setQuiverLinks] = useState<QuiverItem[]>([]);
+  const [newQuiverName, setNewQuiverName] = useState("");
+  const [newQuiverUrl, setNewQuiverUrl] = useState("");
+  const [savingQuiver, setSavingQuiver] = useState(false);
+  const [quiverMsg, setQuiverMsg] = useState("");
+  const [editingQuiverId, setEditingQuiverId] = useState<string | null>(null);
+  const [editQuiverName, setEditQuiverName] = useState("");
+  const [editQuiverUrl, setEditQuiverUrl] = useState("");
+
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
     const isAdmin = localStorage.getItem("piaseg_is_admin") === "1";
@@ -88,7 +104,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t)]);
     setLoading(false);
   }
 
@@ -111,6 +127,16 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${API}/assistance`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) setContacts(await res.json());
+    } catch { /* silencioso */ }
+  }
+
+  async function loadQuiver(t: string) {
+    try {
+      const res = await fetch(`${API}/quiver`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setQuiverLinks(Array.isArray(data) ? data : []);
+      }
     } catch { /* silencioso */ }
   }
 
@@ -153,6 +179,48 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${API}/admin/assistance/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { setContacts((prev) => prev.filter((c) => c.id !== id)); setContactMsg(`✓ "${name}" removido.`); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleCreateQuiver(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newQuiverName.trim() || !newQuiverUrl.trim()) return;
+    setSavingQuiver(true);
+    setQuiverMsg("");
+    try {
+      const res = await fetch(`${API}/admin/quiver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newQuiverName.trim(), url: newQuiverUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setQuiverMsg(`Erro: ${data.detail ?? "Não foi possível salvar."}`); return; }
+      setQuiverMsg(`✓ "${data.name}" adicionado.`);
+      setNewQuiverName(""); setNewQuiverUrl("");
+      await loadQuiver(token);
+    } catch {
+      setQuiverMsg("Erro ao conectar ao servidor.");
+    } finally {
+      setSavingQuiver(false);
+    }
+  }
+
+  async function handleSaveQuiver(id: string) {
+    try {
+      const res = await fetch(`${API}/admin/quiver/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: editQuiverName, url: editQuiverUrl }),
+      });
+      if (res.ok) { setEditingQuiverId(null); await loadQuiver(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleDeleteQuiver(id: string, name: string) {
+    if (!confirm(`Remover "${name}"?`)) return;
+    try {
+      const res = await fetch(`${API}/admin/quiver/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setQuiverLinks((prev) => prev.filter((l) => l.id !== id)); setQuiverMsg(`✓ "${name}" removido.`); }
     } catch { /* silencioso */ }
   }
 
@@ -366,13 +434,14 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
-  const tabStyle = (tab: "faq" | "pdfs" | "especiais" | "assistance" | "users") => ({
-    padding: "8px 18px",
+  const tabStyle = (tab: typeof activeTab) => ({
+    padding: "8px 14px",
     borderRadius: "8px",
     fontWeight: 600,
-    fontSize: "13px",
+    fontSize: "12px",
     cursor: "pointer",
     border: "none",
+    whiteSpace: "nowrap" as const,
     background: activeTab === tab ? "#B8975C" : "transparent",
     color: activeTab === tab ? "#fff" : "#00213A",
   });
@@ -406,31 +475,20 @@ export default function AdminPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
-          <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>
-            📄 Cond. Gerais
-          </button>
-          <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>
-            📋 Especiais
-          </button>
-          <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>
-            🛟 Assistência
-          </button>
-          <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>
-            💬 FAQ
-          </button>
-          <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>
-            👥 Usuários
-          </button>
+        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
+          <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>📄 Cond. Gerais</button>
+          <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
+          <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>🛟 Assistência</button>
+          <button style={tabStyle("quiver")} onClick={() => { setActiveTab("quiver"); setQuiverMsg(""); }}>🎬 Quiver</button>
+          <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>💬 FAQ</button>
+          <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>👥 Usuários</button>
         </div>
 
         {/* ABA: PDFs */}
         {activeTab === "pdfs" && (
           <div>
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
-                Adicionar nova seguradora
-              </h2>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Adicionar nova seguradora</h2>
               <p className="text-xs text-gray-500 mb-4">
                 Envie o PDF das condições gerais. O Piazinho indexa automaticamente e começa a responder perguntas sobre essa seguradora.
               </p>
@@ -443,34 +501,17 @@ export default function AdminPage() {
                   {uploading ? "Enviando..." : "Clique para selecionar o PDF"}
                 </span>
                 <span className="text-xs text-gray-400">Arquivos .pdf até 20MB</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={handleUpload}
-                />
+                <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={handleUpload} />
               </label>
               {uploadMsg && (
-                <p
-                  className="text-xs mt-3 px-3 py-2 rounded-lg"
-                  style={{
-                    background: uploadMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2",
-                    color: uploadMsg.startsWith("✓") ? "#16a34a" : "#dc2626",
-                  }}
-                >
+                <p className="text-xs mt-3 px-3 py-2 rounded-lg"
+                  style={{ background: uploadMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: uploadMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
                   {uploadMsg}
                 </p>
               )}
             </div>
-
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
-              Seguradoras indexadas {!loading && `(${pdfs.length})`}
-            </h2>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : pdfs.length === 0 ? (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Seguradoras indexadas {!loading && `(${pdfs.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : pdfs.length === 0 ? (
               <p className="text-sm text-gray-500">Nenhuma condição geral cadastrada ainda.</p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -479,18 +520,11 @@ export default function AdminPage() {
                     <div className="flex items-center gap-3">
                       <span className="text-lg">📄</span>
                       <div>
-                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>
-                          {derive_display_name_client(pdf)}
-                        </p>
+                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{derive_display_name_client(pdf)}</p>
                         <p className="text-xs text-gray-400">{pdf}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeletePdf(pdf)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
-                    >
-                      Remover
-                    </button>
+                    <button onClick={() => handleDeletePdf(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0">Remover</button>
                   </div>
                 ))}
               </div>
@@ -502,71 +536,39 @@ export default function AdminPage() {
         {activeTab === "especiais" && (
           <div>
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
-                Documentos Especiais
-              </h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Portifólio de Produtos e Assistências 24hs ficam aqui, separados das Condições Gerais.
-              </p>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Documentos Especiais</h2>
+              <p className="text-xs text-gray-500 mb-4">Portifólio de Produtos e Assistências 24hs ficam aqui, separados das Condições Gerais.</p>
               <label
                 className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-8 cursor-pointer transition-colors"
                 style={{ borderColor: uploadingEspecial ? "#B8975C" : "#EAE6DC", background: "#F5F2EC" }}
               >
                 <span className="text-3xl">📤</span>
-                <span className="text-sm font-medium" style={{ color: "#00213A" }}>
-                  {uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}
-                </span>
+                <span className="text-sm font-medium" style={{ color: "#00213A" }}>{uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}</span>
                 <span className="text-xs text-gray-400">Portifólio, Assistências, etc.</span>
-                <input
-                  ref={especialFileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  disabled={uploadingEspecial}
-                  onChange={handleUploadEspecial}
-                />
+                <input ref={especialFileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploadingEspecial} onChange={handleUploadEspecial} />
               </label>
               {uploadEspecialMsg && (
-                <p
-                  className="text-xs mt-3 px-3 py-2 rounded-lg"
-                  style={{
-                    background: uploadEspecialMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2",
-                    color: uploadEspecialMsg.startsWith("✓") ? "#16a34a" : "#dc2626",
-                  }}
-                >
+                <p className="text-xs mt-3 px-3 py-2 rounded-lg"
+                  style={{ background: uploadEspecialMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: uploadEspecialMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
                   {uploadEspecialMsg}
                 </p>
               )}
             </div>
-
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
-              Arquivos especiais {!loading && `(${especiais.length})`}
-            </h2>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : especiais.length === 0 ? (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Arquivos especiais {!loading && `(${especiais.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : especiais.length === 0 ? (
               <p className="text-sm text-gray-500">Nenhum arquivo especial cadastrado ainda.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {especiais.map((pdf) => (
                   <div key={pdf} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-lg">
-                        {pdf.toLowerCase().includes("ortif") ? "📋" : pdf.toLowerCase().includes("ssist") ? "🛟" : "📄"}
-                      </span>
+                      <span className="text-lg">{pdf.toLowerCase().includes("ortif") ? "📋" : pdf.toLowerCase().includes("ssist") ? "🛟" : "📄"}</span>
                       <div>
-                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>
-                          {pdf.replace(/\.pdf$/i, "")}
-                        </p>
+                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{pdf.replace(/\.pdf$/i, "")}</p>
                         <p className="text-xs text-gray-400">{pdf}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteEspecial(pdf)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0"
-                    >
-                      Remover
-                    </button>
+                    <button onClick={() => handleDeleteEspecial(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0">Remover</button>
                   </div>
                 ))}
               </div>
@@ -578,49 +580,24 @@ export default function AdminPage() {
         {activeTab === "assistance" && (
           <div>
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
-                Adicionar seguradora
-              </h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Cadastre o nome, telefone e WhatsApp de assistência 24hs de cada seguradora.
-              </p>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Adicionar seguradora</h2>
+              <p className="text-xs text-gray-500 mb-4">Cadastre o nome, telefone e WhatsApp de assistência 24hs de cada seguradora.</p>
               <form onSubmit={handleCreateContact} className="flex flex-col gap-3">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                    Nome da Seguradora
-                  </label>
-                  <input
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                    placeholder="Ex: Allianz"
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                  />
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Nome da Seguradora</label>
+                  <input value={newContactName} onChange={(e) => setNewContactName(e.target.value)} placeholder="Ex: Allianz"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                      Telefone
-                    </label>
-                    <input
-                      value={newContactPhone}
-                      onChange={(e) => setNewContactPhone(e.target.value)}
-                      placeholder="Ex: 0800 013 0700"
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                    />
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Telefone</label>
+                    <input value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} placeholder="Ex: 0800 013 0700"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                      WhatsApp
-                    </label>
-                    <input
-                      value={newContactWhatsapp}
-                      onChange={(e) => setNewContactWhatsapp(e.target.value)}
-                      placeholder="Ex: 11 99999-9999"
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                    />
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>WhatsApp</label>
+                    <input value={newContactWhatsapp} onChange={(e) => setNewContactWhatsapp(e.target.value)} placeholder="Ex: 11 99999-9999"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                   </div>
                 </div>
                 {contactMsg && (
@@ -629,23 +606,14 @@ export default function AdminPage() {
                     {contactMsg}
                   </p>
                 )}
-                <button
-                  type="submit"
-                  disabled={savingContact || !newContactName.trim()}
-                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
-                  style={{ background: "#B8975C" }}
-                >
+                <button type="submit" disabled={savingContact || !newContactName.trim()}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#B8975C" }}>
                   {savingContact ? "Salvando..." : "Adicionar"}
                 </button>
               </form>
             </div>
-
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
-              Seguradoras cadastradas {!loading && `(${contacts.length})`}
-            </h2>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : contacts.length === 0 ? (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Seguradoras cadastradas {!loading && `(${contacts.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : contacts.length === 0 ? (
               <p className="text-sm text-gray-500">Nenhuma seguradora cadastrada ainda.</p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -669,9 +637,7 @@ export default function AdminPage() {
                           <span className="text-lg">📞</span>
                           <div>
                             <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{c.name}</p>
-                            <p className="text-xs text-gray-400">
-                              {c.phone && `Tel: ${c.phone}`}{c.phone && c.whatsapp && " · "}{c.whatsapp && `WA: ${c.whatsapp}`}
-                            </p>
+                            <p className="text-xs text-gray-400">{c.phone && `Tel: ${c.phone}`}{c.phone && c.whatsapp && " · "}{c.whatsapp && `WA: ${c.whatsapp}`}</p>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
@@ -687,72 +653,105 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA: Quiver */}
+        {activeTab === "quiver" && (
+          <div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Adicionar vídeo</h2>
+              <p className="text-xs text-gray-500 mb-4">Cadastre o nome e o link do YouTube. Os usuários verão esses vídeos ao clicar em "Quiver" no chat.</p>
+              <form onSubmit={handleCreateQuiver} className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Nome do vídeo</label>
+                  <input value={newQuiverName} onChange={(e) => setNewQuiverName(e.target.value)} placeholder="Ex: Como funciona o seguro auto"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Link do YouTube</label>
+                  <input value={newQuiverUrl} onChange={(e) => setNewQuiverUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..."
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                </div>
+                {quiverMsg && (
+                  <p className="text-xs px-3 py-2 rounded-lg"
+                    style={{ background: quiverMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: quiverMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                    {quiverMsg}
+                  </p>
+                )}
+                <button type="submit" disabled={savingQuiver || !newQuiverName.trim() || !newQuiverUrl.trim()}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#B8975C" }}>
+                  {savingQuiver ? "Salvando..." : "Adicionar"}
+                </button>
+              </form>
+            </div>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Vídeos cadastrados {!loading && `(${quiverLinks.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : quiverLinks.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum vídeo cadastrado ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {quiverLinks.map((lnk) => (
+                  <div key={lnk.id} className="bg-white rounded-xl shadow-sm px-4 py-3">
+                    {editingQuiverId === lnk.id ? (
+                      <div className="flex flex-col gap-2">
+                        <input value={editQuiverName} onChange={(e) => setEditQuiverName(e.target.value)} placeholder="Nome do vídeo" className="px-3 py-2 rounded-lg border text-sm outline-none w-full" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <input value={editQuiverUrl} onChange={(e) => setEditQuiverUrl(e.target.value)} placeholder="Link do YouTube" className="px-3 py-2 rounded-lg border text-sm outline-none w-full" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingQuiverId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                          <button onClick={() => handleSaveQuiver(lnk.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-lg flex-shrink-0">▶️</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: "#00213A" }}>{lnk.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{lnk.url}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => { setEditingQuiverId(lnk.id); setEditQuiverName(lnk.name); setEditQuiverUrl(lnk.url); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          <button onClick={() => handleDeleteQuiver(lnk.id, lnk.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ABA: FAQ */}
         {activeTab === "faq" && (
           <div>
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <h2 className="text-sm font-semibold mb-4" style={{ color: "#00213A" }}>
-                Adicionar nova pergunta
-              </h2>
+              <h2 className="text-sm font-semibold mb-4" style={{ color: "#00213A" }}>Adicionar nova pergunta</h2>
               <form onSubmit={handleAdd} className="flex flex-col gap-3">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                    Seguradora
-                  </label>
-                  <select
-                    value={insurer}
-                    onChange={(e) => setInsurer(e.target.value)}
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                  >
-                    {insurerOptions.map((i) => (
-                      <option key={i} value={i}>{i}</option>
-                    ))}
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Seguradora</label>
+                  <select value={insurer} onChange={(e) => setInsurer(e.target.value)}
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                    {insurerOptions.map((i) => <option key={i} value={i}>{i}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                    Pergunta
-                  </label>
-                  <input
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="Ex: Como funciona a carência para vidros?"
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                  />
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Pergunta</label>
+                  <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ex: Como funciona a carência para vidros?"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                    Resposta oficial
-                  </label>
-                  <textarea
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="Escreva a resposta oficial validada pela Piaseg..."
-                    rows={3}
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none resize-none"
-                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                  />
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Resposta oficial</label>
+                  <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Escreva a resposta oficial validada pela Piaseg..." rows={3}
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
                 {error && <p className="text-red-600 text-xs bg-red-50 rounded-lg py-2 px-3">{error}</p>}
-                <button
-                  type="submit"
-                  disabled={saving || !question.trim() || !answer.trim()}
-                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
-                  style={{ background: "#B8975C" }}
-                >
+                <button type="submit" disabled={saving || !question.trim() || !answer.trim()}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#B8975C" }}>
                   {saving ? "Salvando..." : "Adicionar"}
                 </button>
               </form>
             </div>
-
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
-              Perguntas cadastradas {!loading && `(${items.length})`}
-            </h2>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : items.length === 0 ? (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Perguntas cadastradas {!loading && `(${items.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : items.length === 0 ? (
               <p className="text-sm text-gray-500">Nenhuma pergunta cadastrada ainda.</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -793,93 +792,45 @@ export default function AdminPage() {
         {/* ABA: Usuários */}
         {activeTab === "users" && (
           <div>
-            {/* Formulário de criação */}
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>
-                Criar novo acesso
-              </h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Crie um login para cada franqueado. Eles usarão o usuário e senha para entrar no Piazinho.
-              </p>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Criar novo acesso</h2>
+              <p className="text-xs text-gray-500 mb-4">Crie um login para cada franqueado. Eles usarão o usuário e senha para entrar no Piazinho.</p>
               <form onSubmit={handleCreateUser} className="flex flex-col gap-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                      Nome completo
-                    </label>
-                    <input
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      placeholder="Ex: João Silva"
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                    />
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Nome completo</label>
+                    <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ex: João Silva"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                      Usuário (login)
-                    </label>
-                    <input
-                      value={newUsername}
-                      onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
-                      placeholder="Ex: joaosilva"
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                    />
+                    <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Usuário (login)</label>
+                    <input value={newUsername} onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/\s/g, ""))} placeholder="Ex: joao@email.com"
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>
-                    Senha
-                  </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none"
-                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
-                  />
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Senha</label>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres"
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={newIsAdmin}
-                    onChange={(e) => setNewIsAdmin(e.target.checked)}
-                    className="w-4 h-4 rounded"
-                    style={{ accentColor: "#B8975C" }}
-                  />
+                  <input type="checkbox" checked={newIsAdmin} onChange={(e) => setNewIsAdmin(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: "#B8975C" }} />
                   <span className="text-xs text-gray-600">Dar permissão de administrador</span>
                 </label>
                 {userMsg && (
-                  <p
-                    className="text-xs px-3 py-2 rounded-lg"
-                    style={{
-                      background: userMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2",
-                      color: userMsg.startsWith("✓") ? "#16a34a" : "#dc2626",
-                    }}
-                  >
+                  <p className="text-xs px-3 py-2 rounded-lg"
+                    style={{ background: userMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: userMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
                     {userMsg}
                   </p>
                 )}
-                <button
-                  type="submit"
-                  disabled={savingUser || !newUsername.trim() || !newName.trim() || !newPassword}
-                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
-                  style={{ background: "#B8975C" }}
-                >
+                <button type="submit" disabled={savingUser || !newUsername.trim() || !newName.trim() || !newPassword}
+                  className="self-end px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#B8975C" }}>
                   {savingUser ? "Criando..." : "Criar acesso"}
                 </button>
               </form>
             </div>
-
-            {/* Lista de usuários */}
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>
-              Acessos cadastrados {!loading && `(${users.length})`}
-            </h2>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : users.length === 0 ? (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Acessos cadastrados {!loading && `(${users.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : users.length === 0 ? (
               <p className="text-sm text-gray-500">Nenhum usuário cadastrado.</p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -901,7 +852,8 @@ export default function AdminPage() {
                     ) : (
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: u.is_admin ? "rgba(184,151,92,0.2)" : "#EAE6DC", color: u.is_admin ? "#B8975C" : "#666" }}>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                            style={{ background: u.is_admin ? "rgba(184,151,92,0.2)" : "#EAE6DC", color: u.is_admin ? "#B8975C" : "#666" }}>
                             {u.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
@@ -926,7 +878,6 @@ export default function AdminPage() {
   );
 }
 
-// Replica a lógica do backend para exibir nomes amigáveis no cliente
 const KNOWN: Record<string, string> = {
   "HDI Auto perfil 2026.pdf": "HDI",
   "Mapfre 2026.pdf": "Mapfre",

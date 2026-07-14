@@ -58,6 +58,7 @@ interface Message {
   content: string;
   sources?: { source: string; page: number }[];
   insurerOptions?: string[];
+  isEndConfirm?: boolean;
 }
 
 export default function ChatPage() {
@@ -66,25 +67,38 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [token, setToken] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
+  const [showQuiver, setShowQuiver] = useState(false);
   const [assistanceContacts, setAssistanceContacts] = useState<{id: string; name: string; phone: string; whatsapp: string}[]>([]);
+  const [quiverLinks, setQuiverLinks] = useState<{id: string; name: string; url: string}[]>([]);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
     const n = localStorage.getItem("piaseg_name");
+    const u = localStorage.getItem("piaseg_username") ?? "";
     if (!t) { router.replace("/"); return; }
     setToken(t);
     setUserName(n ?? "");
     setIsAdmin(localStorage.getItem("piaseg_is_admin") === "1");
+    setUserEmail(u.includes("@") ? u : "");
+
     fetch(`${API}/assistance`, { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json())
       .then((list) => setAssistanceContacts(Array.isArray(list) ? list : []))
       .catch(() => {});
+
+    fetch(`${API}/quiver`, { headers: { Authorization: `Bearer ${t}` } })
+      .then((r) => r.json())
+      .then((list) => setQuiverLinks(Array.isArray(list) ? list : []))
+      .catch(() => {});
+
     setMessages([{
       role: "assistant",
       content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o **Piazinho**, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
@@ -157,6 +171,66 @@ export default function ChatPage() {
     router.replace("/");
   }
 
+  function handleSair() {
+    if (messages.length > 1 && userEmail) {
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "Deseja enviar essa conversa para seu e-mail? 📧",
+        isEndConfirm: true,
+      }]);
+    } else {
+      logout();
+    }
+  }
+
+  async function handleConfirmEmail() {
+    const conversationMessages = messages.filter((m) => !m.isEndConfirm);
+    setSendingEmail(true);
+    setMessages((prev) => [
+      ...prev.filter((m) => !m.isEndConfirm),
+      { role: "user", content: "Sim, enviar por e-mail" },
+      { role: "assistant", content: "Gerando PDF e enviando para seu e-mail... ⏳" },
+    ]);
+    try {
+      const res = await fetch(`${API}/chat/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          messages: conversationMessages.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+      if (res.ok) {
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: `✅ Conversa enviada para **${userEmail}**! Até a próxima. 😊` },
+        ]);
+      } else {
+        const err = await res.json();
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: `⚠️ ${err.detail ?? "Não foi possível enviar o e-mail."}` },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: "⚠️ Erro ao conectar ao servidor." },
+      ]);
+    } finally {
+      setSendingEmail(false);
+      setTimeout(logout, 2500);
+    }
+  }
+
+  function handleDeclineEmail() {
+    setMessages((prev) => [
+      ...prev.filter((m) => !m.isEndConfirm),
+      { role: "user", content: "Não, obrigado" },
+      { role: "assistant", content: `Tudo bem! Obrigado por usar o Piazinho. Até a próxima, ${userName}! 😊` },
+    ]);
+    setTimeout(logout, 2000);
+  }
+
   return (
     <div className="flex flex-col h-dvh" style={{ background: "#F5F2EC" }}>
       {/* Header */}
@@ -177,30 +251,37 @@ export default function ChatPage() {
             <p className="text-white/60 text-xs">Assistente virtual da Piaseg</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto">
           <button
             onClick={() => setShowPortfolio(true)}
-            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0"
           >
             📋 Portifólio
           </button>
           <button
             onClick={() => setShowAssistance(true)}
-            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0"
           >
             🛟 Assistência
+          </button>
+          <button
+            onClick={() => setShowQuiver(true)}
+            className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0"
+          >
+            🎬 Quiver
           </button>
           {isAdmin && (
             <button
               onClick={() => router.push("/admin")}
-              className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+              className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0"
             >
               ⚙️ FAQ
             </button>
           )}
           <button
-            onClick={logout}
-            className="text-white/60 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
+            onClick={handleSair}
+            disabled={sendingEmail}
+            className="text-white/60 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0 disabled:opacity-40"
           >
             Sair
           </button>
@@ -257,6 +338,26 @@ export default function ChatPage() {
                       {opt}
                     </button>
                   ))}
+                </div>
+              )}
+              {msg.isEndConfirm && i === messages.length - 1 && !sendingEmail && (
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={handleConfirmEmail}
+                    disabled={loading}
+                    className="text-xs px-4 py-2 rounded-full font-medium transition-colors disabled:opacity-50"
+                    style={{ background: "#00213A", color: "white" }}
+                  >
+                    Sim, enviar 📧
+                  </button>
+                  <button
+                    onClick={handleDeclineEmail}
+                    disabled={loading}
+                    className="text-xs px-4 py-2 rounded-full border font-medium transition-colors disabled:opacity-50"
+                    style={{ borderColor: "#EAE6DC", color: "#666", background: "white" }}
+                  >
+                    Não, obrigado
+                  </button>
                 </div>
               )}
             </div>
@@ -420,6 +521,57 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* Modal do Quiver */}
+      {showQuiver && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setShowQuiver(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl px-5 pt-5 pb-6"
+            style={{ background: "white" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-bold text-sm" style={{ color: "#00213A" }}>🎬 Quiver — Vídeos explicativos</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9a7d4a" }}>Toque para assistir no YouTube</p>
+              </div>
+              <button
+                onClick={() => setShowQuiver(false)}
+                className="text-lg leading-none px-2 py-1 rounded-lg"
+                style={{ color: "#9a7d4a" }}
+              >
+                ✕
+              </button>
+            </div>
+            {quiverLinks.length === 0 ? (
+              <p className="text-sm text-center py-4" style={{ color: "#9a7d4a" }}>
+                Nenhum vídeo cadastrado ainda. Adicione pelo painel admin.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                {quiverLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors active:scale-95"
+                    style={{ borderColor: "#EAE6DC", background: "#F5F2EC", textDecoration: "none" }}
+                    onClick={() => setShowQuiver(false)}
+                  >
+                    <span className="text-2xl flex-shrink-0">▶️</span>
+                    <span className="text-sm font-medium" style={{ color: "#00213A" }}>{link.name}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div
         className="px-4 py-3 flex gap-2 flex-shrink-0 border-t"
@@ -430,7 +582,7 @@ export default function ChatPage() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
           placeholder={pendingQuestion ? "Digite ou clique na seguradora..." : "Digite sua dúvida sobre seguros..."}
-          disabled={loading}
+          disabled={loading || sendingEmail}
           className="flex-1 px-4 py-3 rounded-xl text-sm outline-none border"
           style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
           onFocus={(e) => (e.target.style.borderColor = "#B8975C")}
@@ -438,7 +590,7 @@ export default function ChatPage() {
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim()}
+          disabled={loading || !input.trim() || sendingEmail}
           className="w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           style={{ background: "#B8975C" }}
         >
