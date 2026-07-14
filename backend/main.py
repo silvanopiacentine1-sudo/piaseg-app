@@ -571,7 +571,7 @@ def delete_quiver(link_id: str, user: dict = Depends(require_admin)):
 
 @app.post("/chat/send-email")
 def send_conversation_email(body: SendEmailRequest, user: dict = Depends(get_current_user)):
-    user_email = user["username"]
+    user_email = user["sub"]
     user_name = user["name"]
     if "@" not in user_email:
         raise HTTPException(status_code=400, detail="Este usuário não tem e-mail cadastrado.")
