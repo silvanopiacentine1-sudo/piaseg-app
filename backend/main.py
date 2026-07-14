@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
 import smtplib
 import threading
 import time
@@ -9,6 +10,7 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import List
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -249,7 +251,7 @@ class ConversationMessage(BaseModel):
 
 
 class SendEmailRequest(BaseModel):
-    messages: list[ConversationMessage]
+    messages: List[ConversationMessage]
 
 
 @app.post("/auth/login")
