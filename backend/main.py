@@ -588,14 +588,3 @@ def send_conversation_email(body: SendEmailRequest, user: dict = Depends(get_cur
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-@app.get("/debug/smtp")
-def debug_smtp(user: dict = Depends(require_admin)):
-    return {
-        "SMTP_HOST": bool(os.getenv("SMTP_HOST")),
-        "SMTP_PORT": os.getenv("SMTP_PORT", "not set"),
-        "SMTP_USER": bool(os.getenv("SMTP_USER")),
-        "SMTP_PASS": bool(os.getenv("SMTP_PASS")),
-        "EMAIL_FROM": bool(os.getenv("EMAIL_FROM")),
-    }
