@@ -588,3 +588,37 @@ def send_conversation_email(body: SendEmailRequest, user: dict = Depends(get_cur
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/debug/smtp-test")
+def debug_smtp_test(user: dict = Depends(require_admin)):
+    import ssl as _ssl
+    host = os.getenv("SMTP_HOST", "")
+    port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    result = {
+        "host": host,
+        "port": port,
+        "user": smtp_user,
+        "pass_len": len(smtp_pass),
+        "pass_first": smtp_pass[:1] if smtp_pass else "",
+        "pass_last": smtp_pass[-1:] if smtp_pass else "",
+    }
+    try:
+        ctx = _ssl.create_default_context()
+        with smtplib.SMTP_SSL(host, port, context=ctx) as s:
+            esmtp = s.esmtp_features
+            result["connected"] = True
+            result["esmtp_features"] = list(esmtp.keys())
+            try:
+                s.login(smtp_user, smtp_pass)
+                result["login"] = "ok"
+            except smtplib.SMTPAuthenticationError as e:
+                result["login"] = f"auth_error: {e.smtp_code} {e.smtp_error}"
+            except Exception as e:
+                result["login"] = f"error: {type(e).__name__}: {e}"
+    except Exception as e:
+        result["connected"] = False
+        result["connect_error"] = f"{type(e).__name__}: {e}"
+    return result
