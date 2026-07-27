@@ -41,11 +41,15 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replacePdfInputRef = useRef<HTMLInputElement>(null);
+  const [replacingPdf, setReplacingPdf] = useState<string | null>(null);
 
   const [especiais, setEspeciais] = useState<string[]>([]);
   const [uploadingEspecial, setUploadingEspecial] = useState(false);
   const [uploadEspecialMsg, setUploadEspecialMsg] = useState("");
   const especialFileInputRef = useRef<HTMLInputElement>(null);
+  const replaceEspecialInputRef = useRef<HTMLInputElement>(null);
+  const [replacingEspecial, setReplacingEspecial] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver">("pdfs");
 
@@ -288,6 +292,58 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
+  async function handleReplacePdf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !replacingPdf) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) { setUploadMsg("Apenas arquivos PDF são permitidos."); return; }
+    setUploading(true);
+    setUploadMsg("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${API}/admin/upload-pdf`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const data = await res.json();
+      if (!res.ok) { setUploadMsg(data.detail ?? "Erro no upload."); return; }
+      if (file.name !== replacingPdf) {
+        await fetch(`${API}/admin/pdf/${encodeURIComponent(replacingPdf)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      }
+      setUploadMsg(`✓ "${derive_display_name_client(replacingPdf)}" substituído com sucesso.`);
+      await loadAll(token);
+    } catch {
+      setUploadMsg("Erro ao substituir o arquivo.");
+    } finally {
+      setUploading(false);
+      setReplacingPdf(null);
+      if (replacePdfInputRef.current) replacePdfInputRef.current.value = "";
+    }
+  }
+
+  async function handleReplaceEspecial(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !replacingEspecial) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) { setUploadEspecialMsg("Apenas arquivos PDF são permitidos."); return; }
+    setUploadingEspecial(true);
+    setUploadEspecialMsg("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${API}/admin/upload-especial`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const data = await res.json();
+      if (!res.ok) { setUploadEspecialMsg(data.detail ?? "Erro no upload."); return; }
+      if (file.name !== replacingEspecial) {
+        await fetch(`${API}/admin/especial/${encodeURIComponent(replacingEspecial)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      }
+      setUploadEspecialMsg(`✓ "${replacingEspecial.replace(/\.pdf$/i, "")}" substituído com sucesso.`);
+      await loadEspeciais(token);
+    } catch {
+      setUploadEspecialMsg("Erro ao substituir o arquivo.");
+    } finally {
+      setUploadingEspecial(false);
+      setReplacingEspecial(null);
+      if (replaceEspecialInputRef.current) replaceEspecialInputRef.current.value = "";
+    }
+  }
+
   async function handleUploadEspecial(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -502,6 +558,7 @@ export default function AdminPage() {
                 </span>
                 <span className="text-xs text-gray-400">Arquivos .pdf até 20MB</span>
                 <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={handleUpload} />
+              <input ref={replacePdfInputRef} type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={handleReplacePdf} />
               </label>
               {uploadMsg && (
                 <p className="text-xs mt-3 px-3 py-2 rounded-lg"
@@ -524,7 +581,10 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{pdf}</p>
                       </div>
                     </div>
-                    <button onClick={() => handleDeletePdf(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0">Remover</button>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={() => { setReplacingPdf(pdf); setTimeout(() => replacePdfInputRef.current?.click(), 50); }} disabled={uploading} className="text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Substituir</button>
+                      <button onClick={() => handleDeletePdf(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -546,6 +606,7 @@ export default function AdminPage() {
                 <span className="text-sm font-medium" style={{ color: "#00213A" }}>{uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}</span>
                 <span className="text-xs text-gray-400">Portifólio, Assistências, etc.</span>
                 <input ref={especialFileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploadingEspecial} onChange={handleUploadEspecial} />
+                <input ref={replaceEspecialInputRef} type="file" accept=".pdf" className="hidden" disabled={uploadingEspecial} onChange={handleReplaceEspecial} />
               </label>
               {uploadEspecialMsg && (
                 <p className="text-xs mt-3 px-3 py-2 rounded-lg"
@@ -568,7 +629,10 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{pdf}</p>
                       </div>
                     </div>
-                    <button onClick={() => handleDeleteEspecial(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 flex-shrink-0">Remover</button>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={() => { setReplacingEspecial(pdf); setTimeout(() => replaceEspecialInputRef.current?.click(), 50); }} disabled={uploadingEspecial} className="text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Substituir</button>
+                      <button onClick={() => handleDeleteEspecial(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                    </div>
                   </div>
                 ))}
               </div>
