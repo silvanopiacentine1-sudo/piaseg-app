@@ -166,6 +166,7 @@ export default function AdminPage() {
       const d = await res.json();
       if (!res.ok) { setProductMsg(`Erro: ${d.detail}`); return; }
       setProductMsg(`✓ Categoria "${d.name}" criada.`); setNewProductCatName(""); await loadProducts(token);
+      setExpandedProductCat(d.id); setAddDocToProduct(d.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg("");
     } catch { setProductMsg("Erro ao conectar."); } finally { setSavingProductCat(false); }
   }
 
@@ -748,8 +749,8 @@ export default function AdminPage() {
                             </div>
                           </form>
                         ) : (
-                          <button onClick={() => { setAddDocToProduct(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border mt-1 self-start" style={{ borderColor: "#B8975C", color: "#B8975C" }}>
-                            + Adicionar documento por URL
+                          <button onClick={() => { setAddDocToProduct(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold mt-1 self-start" style={{ background: "#B8975C" }}>
+                            + Adicionar link de PDF
                           </button>
                         )}
                       </div>
