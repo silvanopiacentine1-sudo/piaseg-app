@@ -206,12 +206,23 @@ def _save_services(data: list) -> None:
 
 
 def _download_pdf(url: str) -> bytes:
-    req = _urllib.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; PiasegBot/1.0)"})
-    with _urllib.urlopen(req, timeout=30) as resp:
-        ct = resp.headers.get("Content-Type", "")
-        data = resp.read()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/pdf,application/octet-stream,*/*;q=0.9",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+    req = _urllib.Request(url, headers=headers)
+    try:
+        with _urllib.urlopen(req, timeout=30) as resp:
+            ct = resp.headers.get("Content-Type", "")
+            data = resp.read()
+    except Exception as e:
+        raise ValueError(f"Falha ao baixar PDF: {e}")
     if "pdf" not in ct.lower() and not url.lower().split("?")[0].endswith(".pdf"):
-        if not data[:4] == b"%PDF":
+        if data[:4] != b"%PDF":
             raise ValueError(f"URL não retornou um PDF válido (Content-Type: {ct})")
     return data
 
