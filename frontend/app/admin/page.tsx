@@ -51,7 +51,7 @@ export default function AdminPage() {
   const replaceEspecialInputRef = useRef<HTMLInputElement>(null);
   const [replacingEspecial, setReplacingEspecial] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos">("pdfs");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos">("produtos");
 
   // Assistance tab state
   interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
@@ -671,8 +671,7 @@ export default function AdminPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
-          <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>📄 Cond. Gerais</button>
-          <button style={tabStyle("produtos")} onClick={() => { setActiveTab("produtos"); setProductMsg(""); }}>📦 Produtos</button>
+          <button style={tabStyle("produtos")} onClick={() => { setActiveTab("produtos"); setProductMsg(""); }}>📄 Cond. Gerais</button>
           <button style={tabStyle("servicos")} onClick={() => { setActiveTab("servicos"); setServiceMsg(""); }}>🔧 Serviços 24hs</button>
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
           <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>🛟 Assistência</button>
@@ -681,64 +680,12 @@ export default function AdminPage() {
           <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>👥 Usuários</button>
         </div>
 
-        {/* ABA: PDFs */}
-        {activeTab === "pdfs" && (
-          <div>
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Adicionar nova seguradora</h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Envie o PDF das condições gerais. O Piazinho indexa automaticamente e começa a responder perguntas sobre essa seguradora.
-              </p>
-              <label
-                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-8 cursor-pointer transition-colors"
-                style={{ borderColor: uploading ? "#B8975C" : "#EAE6DC", background: "#F5F2EC" }}
-              >
-                <span className="text-3xl">📤</span>
-                <span className="text-sm font-medium" style={{ color: "#00213A" }}>
-                  {uploading ? "Enviando..." : "Clique para selecionar o PDF"}
-                </span>
-                <span className="text-xs text-gray-400">Arquivos .pdf até 20MB</span>
-                <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={handleUpload} />
-              <input ref={replacePdfInputRef} type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={handleReplacePdf} />
-              </label>
-              {uploadMsg && (
-                <p className="text-xs mt-3 px-3 py-2 rounded-lg"
-                  style={{ background: uploadMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: uploadMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
-                  {uploadMsg}
-                </p>
-              )}
-            </div>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Seguradoras indexadas {!loading && `(${pdfs.length})`}</h2>
-            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : pdfs.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhuma condição geral cadastrada ainda.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {pdfs.map((pdf) => (
-                  <div key={pdf} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">📄</span>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{derive_display_name_client(pdf)}</p>
-                        <p className="text-xs text-gray-400">{pdf}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button onClick={() => { setReplacingPdf(pdf); setTimeout(() => replacePdfInputRef.current?.click(), 50); }} disabled={uploading} className="text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Substituir</button>
-                      <button onClick={() => handleDeletePdf(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ABA: Produtos */}
+        {/* ABA: Condições Gerais */}
         {activeTab === "produtos" && (
           <div>
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
-              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Nova categoria de produtos</h2>
-              <p className="text-xs text-gray-500 mb-3">Ex: Auto, Residencial, Empresarial, Vida...</p>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Nova categoria de condições gerais</h2>
+              <p className="text-xs text-gray-500 mb-3">Ex: Seguro Auto, Seguro Residencial, Seguro Empresarial, Seguro Vida...</p>
               <form onSubmit={handleCreateProductCat} className="flex gap-2">
                 <input value={newProductCatName} onChange={(e) => setNewProductCatName(e.target.value)} placeholder="Nome da categoria"
                   className="flex-1 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
@@ -749,8 +696,8 @@ export default function AdminPage() {
               </form>
               {productMsg && <p className="text-xs mt-2 px-3 py-2 rounded-lg" style={{ background: productMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: productMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{productMsg}</p>}
             </div>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Categorias ({productCats.length})</h2>
-            {productCats.length === 0 ? <p className="text-sm text-gray-500">Nenhuma categoria criada ainda.</p> : (
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Categorias de condições gerais ({productCats.length})</h2>
+            {productCats.length === 0 ? <p className="text-sm text-gray-500">Nenhuma categoria criada ainda. Crie uma categoria (ex: "Seguro Auto") e cole os links dos PDFs das seguradoras.</p> : (
               <div className="flex flex-col gap-3">
                 {productCats.map((cat) => (
                   <div key={cat.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -788,7 +735,7 @@ export default function AdminPage() {
                         ))}
                         {addDocToProduct === cat.id ? (
                           <form onSubmit={(e) => handleImportProductDoc(e, cat.id)} className="flex flex-col gap-2 mt-1">
-                            <input value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="Nome do documento (ex: Tokio Marine - Auto)"
+                            <input value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="Nome da seguradora (ex: Tokio Marine)"
                               className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
                             <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
                               className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
