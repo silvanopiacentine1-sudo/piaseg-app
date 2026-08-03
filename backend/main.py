@@ -952,6 +952,33 @@ def download_backup(user: dict = Depends(require_admin)):
     )
 
 
+@app.get("/admin/diag")
+def diag(user: dict = Depends(require_admin)):
+    import os
+    from insurers import DATA_DIR, PDF_FOLDER, PRODUCTS_FOLDER, ESPECIAIS_FOLDER
+    files_in_data = []
+    try:
+        files_in_data = os.listdir(str(DATA_DIR))
+    except Exception as e:
+        files_in_data = [f"ERRO: {e}"]
+    products_json_exists = (DATA_DIR / "products.json").exists()
+    products_json_content = ""
+    if products_json_exists:
+        try:
+            products_json_content = (DATA_DIR / "products.json").read_text()[:200]
+        except Exception as e:
+            products_json_content = f"ERRO: {e}"
+    return {
+        "data_dir": str(DATA_DIR),
+        "pdf_folder": str(PDF_FOLDER),
+        "products_folder": str(PRODUCTS_FOLDER),
+        "especiais_folder": str(ESPECIAIS_FOLDER),
+        "files_in_data": files_in_data,
+        "products_json_exists": products_json_exists,
+        "products_json_preview": products_json_content,
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "backup-automatico"}
