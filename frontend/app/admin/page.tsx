@@ -51,7 +51,7 @@ export default function AdminPage() {
   const replaceEspecialInputRef = useRef<HTMLInputElement>(null);
   const [replacingEspecial, setReplacingEspecial] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver">("pdfs");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos">("pdfs");
 
   // Assistance tab state
   interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
@@ -87,6 +87,37 @@ export default function AdminPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [userMsg, setUserMsg] = useState("");
 
+  // Products & Services tab shared types
+  interface CategoryDocument { id: string; name: string; source_url: string; filename: string; status: string; }
+  interface ProductCategory { id: string; name: string; documents: CategoryDocument[]; }
+
+  // Products tab state
+  const [productCats, setProductCats] = useState<ProductCategory[]>([]);
+  const [newProductCatName, setNewProductCatName] = useState("");
+  const [savingProductCat, setSavingProductCat] = useState(false);
+  const [productMsg, setProductMsg] = useState("");
+  const [editingProductCatId, setEditingProductCatId] = useState<string | null>(null);
+  const [editProductCatName, setEditProductCatName] = useState("");
+  const [expandedProductCat, setExpandedProductCat] = useState<string | null>(null);
+  const [addDocToProduct, setAddDocToProduct] = useState<string | null>(null);
+  const [importingProductDoc, setImportingProductDoc] = useState(false);
+
+  // Services tab state
+  const [serviceCats, setServiceCats] = useState<ProductCategory[]>([]);
+  const [newServiceCatName, setNewServiceCatName] = useState("");
+  const [savingServiceCat, setSavingServiceCat] = useState(false);
+  const [serviceMsg, setServiceMsg] = useState("");
+  const [editingServiceCatId, setEditingServiceCatId] = useState<string | null>(null);
+  const [editServiceCatName, setEditServiceCatName] = useState("");
+  const [expandedServiceCat, setExpandedServiceCat] = useState<string | null>(null);
+  const [addDocToService, setAddDocToService] = useState<string | null>(null);
+  const [importingServiceDoc, setImportingServiceDoc] = useState(false);
+
+  // Shared doc form state (only one active at a time)
+  const [newDocName, setNewDocName] = useState("");
+  const [newDocUrl, setNewDocUrl] = useState("");
+  const [docImportMsg, setDocImportMsg] = useState("");
+
   // Quiver tab state
   const [quiverLinks, setQuiverLinks] = useState<QuiverItem[]>([]);
   const [newQuiverName, setNewQuiverName] = useState("");
@@ -108,8 +139,116 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t)]);
     setLoading(false);
+  }
+
+  async function loadProducts(t: string) {
+    try {
+      const res = await fetch(`${API}/products`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) { const d = await res.json(); setProductCats(Array.isArray(d) ? d : []); }
+    } catch { /* silencioso */ }
+  }
+
+  async function loadServices(t: string) {
+    try {
+      const res = await fetch(`${API}/services`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) { const d = await res.json(); setServiceCats(Array.isArray(d) ? d : []); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleCreateProductCat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newProductCatName.trim()) return;
+    setSavingProductCat(true); setProductMsg("");
+    try {
+      const res = await fetch(`${API}/admin/products/categories`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: newProductCatName.trim() }) });
+      const d = await res.json();
+      if (!res.ok) { setProductMsg(`Erro: ${d.detail}`); return; }
+      setProductMsg(`✓ Categoria "${d.name}" criada.`); setNewProductCatName(""); await loadProducts(token);
+    } catch { setProductMsg("Erro ao conectar."); } finally { setSavingProductCat(false); }
+  }
+
+  async function handleRenameProductCat(catId: string) {
+    try {
+      const res = await fetch(`${API}/admin/products/categories/${catId}`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: editProductCatName }) });
+      if (res.ok) { setEditingProductCatId(null); await loadProducts(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleDeleteProductCat(catId: string, name: string) {
+    if (!confirm(`Remover categoria "${name}" e todos os seus documentos?`)) return;
+    try {
+      const res = await fetch(`${API}/admin/products/categories/${catId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setProductMsg(`✓ "${name}" removida.`); await loadProducts(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleImportProductDoc(e: React.FormEvent, catId: string) {
+    e.preventDefault();
+    if (!newDocName.trim() || !newDocUrl.trim()) return;
+    setImportingProductDoc(true); setDocImportMsg("");
+    try {
+      const res = await fetch(`${API}/admin/products/${catId}/documents`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: newDocName.trim(), url: newDocUrl.trim() }) });
+      const d = await res.json();
+      if (!res.ok) { setDocImportMsg(`Erro: ${d.detail}`); return; }
+      setDocImportMsg(`✓ "${d.name}" importado com sucesso.`); setNewDocName(""); setNewDocUrl(""); setAddDocToProduct(null); await loadProducts(token);
+    } catch { setDocImportMsg("Erro ao conectar."); } finally { setImportingProductDoc(false); }
+  }
+
+  async function handleDeleteProductDoc(catId: string, docId: string, name: string) {
+    if (!confirm(`Remover "${name}"?`)) return;
+    try {
+      await fetch(`${API}/admin/products/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      await loadProducts(token);
+    } catch { /* silencioso */ }
+  }
+
+  async function handleCreateServiceCat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newServiceCatName.trim()) return;
+    setSavingServiceCat(true); setServiceMsg("");
+    try {
+      const res = await fetch(`${API}/admin/services/categories`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: newServiceCatName.trim() }) });
+      const d = await res.json();
+      if (!res.ok) { setServiceMsg(`Erro: ${d.detail}`); return; }
+      setServiceMsg(`✓ Categoria "${d.name}" criada.`); setNewServiceCatName(""); await loadServices(token);
+    } catch { setServiceMsg("Erro ao conectar."); } finally { setSavingServiceCat(false); }
+  }
+
+  async function handleRenameServiceCat(catId: string) {
+    try {
+      const res = await fetch(`${API}/admin/services/categories/${catId}`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: editServiceCatName }) });
+      if (res.ok) { setEditingServiceCatId(null); await loadServices(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleDeleteServiceCat(catId: string, name: string) {
+    if (!confirm(`Remover categoria "${name}" e todos os seus documentos?`)) return;
+    try {
+      const res = await fetch(`${API}/admin/services/categories/${catId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setServiceMsg(`✓ "${name}" removida.`); await loadServices(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleImportServiceDoc(e: React.FormEvent, catId: string) {
+    e.preventDefault();
+    if (!newDocName.trim() || !newDocUrl.trim()) return;
+    setImportingServiceDoc(true); setDocImportMsg("");
+    try {
+      const res = await fetch(`${API}/admin/services/${catId}/documents`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: newDocName.trim(), url: newDocUrl.trim() }) });
+      const d = await res.json();
+      if (!res.ok) { setDocImportMsg(`Erro: ${d.detail}`); return; }
+      setDocImportMsg(`✓ "${d.name}" importado com sucesso.`); setNewDocName(""); setNewDocUrl(""); setAddDocToService(null); await loadServices(token);
+    } catch { setDocImportMsg("Erro ao conectar."); } finally { setImportingServiceDoc(false); }
+  }
+
+  async function handleDeleteServiceDoc(catId: string, docId: string, name: string) {
+    if (!confirm(`Remover "${name}"?`)) return;
+    try {
+      await fetch(`${API}/admin/services/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      await loadServices(token);
+    } catch { /* silencioso */ }
   }
 
   async function loadInsurers(t: string) {
@@ -533,6 +672,8 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
           <button style={tabStyle("pdfs")} onClick={() => setActiveTab("pdfs")}>📄 Cond. Gerais</button>
+          <button style={tabStyle("produtos")} onClick={() => { setActiveTab("produtos"); setProductMsg(""); }}>📦 Produtos</button>
+          <button style={tabStyle("servicos")} onClick={() => { setActiveTab("servicos"); setServiceMsg(""); }}>🔧 Serviços 24hs</button>
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
           <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>🛟 Assistência</button>
           <button style={tabStyle("quiver")} onClick={() => { setActiveTab("quiver"); setQuiverMsg(""); }}>🎬 Quiver</button>
@@ -585,6 +726,168 @@ export default function AdminPage() {
                       <button onClick={() => { setReplacingPdf(pdf); setTimeout(() => replacePdfInputRef.current?.click(), 50); }} disabled={uploading} className="text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Substituir</button>
                       <button onClick={() => handleDeletePdf(pdf)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Produtos */}
+        {activeTab === "produtos" && (
+          <div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Nova categoria de produtos</h2>
+              <p className="text-xs text-gray-500 mb-3">Ex: Auto, Residencial, Empresarial, Vida...</p>
+              <form onSubmit={handleCreateProductCat} className="flex gap-2">
+                <input value={newProductCatName} onChange={(e) => setNewProductCatName(e.target.value)} placeholder="Nome da categoria"
+                  className="flex-1 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                <button type="submit" disabled={savingProductCat || !newProductCatName.trim()}
+                  className="px-4 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 flex-shrink-0" style={{ background: "#B8975C" }}>
+                  {savingProductCat ? "..." : "+ Criar"}
+                </button>
+              </form>
+              {productMsg && <p className="text-xs mt-2 px-3 py-2 rounded-lg" style={{ background: productMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: productMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{productMsg}</p>}
+            </div>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Categorias ({productCats.length})</h2>
+            {productCats.length === 0 ? <p className="text-sm text-gray-500">Nenhuma categoria criada ainda.</p> : (
+              <div className="flex flex-col gap-3">
+                {productCats.map((cat) => (
+                  <div key={cat.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 flex items-center justify-between gap-3">
+                      {editingProductCatId === cat.id ? (
+                        <div className="flex gap-2 flex-1">
+                          <input value={editProductCatName} onChange={(e) => setEditProductCatName(e.target.value)} className="flex-1 px-3 py-1.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                          <button onClick={() => handleRenameProductCat(cat.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                          <button onClick={() => setEditingProductCatId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => setExpandedProductCat(expandedProductCat === cat.id ? null : cat.id)} className="flex items-center gap-2 flex-1 text-left">
+                            <span className="text-base">{expandedProductCat === cat.id ? "▾" : "▸"}</span>
+                            <span className="text-sm font-semibold" style={{ color: "#00213A" }}>{cat.name}</span>
+                            <span className="text-xs text-gray-400 ml-1">({cat.documents.length} doc{cat.documents.length !== 1 ? "s" : ""})</span>
+                          </button>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={() => { setEditingProductCatId(cat.id); setEditProductCatName(cat.name); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Renomear</button>
+                            <button onClick={() => handleDeleteProductCat(cat.id, cat.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500">Remover</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {expandedProductCat === cat.id && (
+                      <div className="border-t px-4 py-3 flex flex-col gap-2" style={{ borderColor: "#F5F2EC", background: "#FAFAF8" }}>
+                        {cat.documents.map((doc) => (
+                          <div key={doc.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
+                              <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>
+                            </div>
+                            <button onClick={() => handleDeleteProductDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500 flex-shrink-0">Remover</button>
+                          </div>
+                        ))}
+                        {addDocToProduct === cat.id ? (
+                          <form onSubmit={(e) => handleImportProductDoc(e, cat.id)} className="flex flex-col gap-2 mt-1">
+                            <input value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="Nome do documento (ex: Tokio Marine - Auto)"
+                              className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                            <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                              className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                            {docImportMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: docImportMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: docImportMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{docImportMsg}</p>}
+                            <div className="flex gap-2 justify-end">
+                              <button type="button" onClick={() => { setAddDocToProduct(null); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                              <button type="submit" disabled={importingProductDoc || !newDocName.trim() || !newDocUrl.trim()} className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
+                                {importingProductDoc ? "Importando..." : "Importar PDF"}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <button onClick={() => { setAddDocToProduct(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border mt-1 self-start" style={{ borderColor: "#B8975C", color: "#B8975C" }}>
+                            + Adicionar documento por URL
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Serviços 24hs */}
+        {activeTab === "servicos" && (
+          <div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Nova categoria de serviços</h2>
+              <p className="text-xs text-gray-500 mb-3">Ex: Serviços Automóvel, Serviços Residencial, Serviços Empresarial...</p>
+              <form onSubmit={handleCreateServiceCat} className="flex gap-2">
+                <input value={newServiceCatName} onChange={(e) => setNewServiceCatName(e.target.value)} placeholder="Nome da categoria"
+                  className="flex-1 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                <button type="submit" disabled={savingServiceCat || !newServiceCatName.trim()}
+                  className="px-4 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 flex-shrink-0" style={{ background: "#B8975C" }}>
+                  {savingServiceCat ? "..." : "+ Criar"}
+                </button>
+              </form>
+              {serviceMsg && <p className="text-xs mt-2 px-3 py-2 rounded-lg" style={{ background: serviceMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: serviceMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{serviceMsg}</p>}
+            </div>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Categorias ({serviceCats.length})</h2>
+            {serviceCats.length === 0 ? <p className="text-sm text-gray-500">Nenhuma categoria criada ainda.</p> : (
+              <div className="flex flex-col gap-3">
+                {serviceCats.map((cat) => (
+                  <div key={cat.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 flex items-center justify-between gap-3">
+                      {editingServiceCatId === cat.id ? (
+                        <div className="flex gap-2 flex-1">
+                          <input value={editServiceCatName} onChange={(e) => setEditServiceCatName(e.target.value)} className="flex-1 px-3 py-1.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                          <button onClick={() => handleRenameServiceCat(cat.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                          <button onClick={() => setEditingServiceCatId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => setExpandedServiceCat(expandedServiceCat === cat.id ? null : cat.id)} className="flex items-center gap-2 flex-1 text-left">
+                            <span className="text-base">{expandedServiceCat === cat.id ? "▾" : "▸"}</span>
+                            <span className="text-sm font-semibold" style={{ color: "#00213A" }}>{cat.name}</span>
+                            <span className="text-xs text-gray-400 ml-1">({cat.documents.length} doc{cat.documents.length !== 1 ? "s" : ""})</span>
+                          </button>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={() => { setEditingServiceCatId(cat.id); setEditServiceCatName(cat.name); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Renomear</button>
+                            <button onClick={() => handleDeleteServiceCat(cat.id, cat.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500">Remover</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {expandedServiceCat === cat.id && (
+                      <div className="border-t px-4 py-3 flex flex-col gap-2" style={{ borderColor: "#F5F2EC", background: "#FAFAF8" }}>
+                        {cat.documents.map((doc) => (
+                          <div key={doc.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
+                              <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>
+                            </div>
+                            <button onClick={() => handleDeleteServiceDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500 flex-shrink-0">Remover</button>
+                          </div>
+                        ))}
+                        {addDocToService === cat.id ? (
+                          <form onSubmit={(e) => handleImportServiceDoc(e, cat.id)} className="flex flex-col gap-2 mt-1">
+                            <input value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="Nome do documento (ex: Tokio Marine - Serviços Auto)"
+                              className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                            <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                              className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                            {docImportMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: docImportMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: docImportMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{docImportMsg}</p>}
+                            <div className="flex gap-2 justify-end">
+                              <button type="button" onClick={() => { setAddDocToService(null); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                              <button type="submit" disabled={importingServiceDoc || !newDocName.trim() || !newDocUrl.trim()} className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
+                                {importingServiceDoc ? "Importando..." : "Importar PDF"}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <button onClick={() => { setAddDocToService(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border mt-1 self-start" style={{ borderColor: "#B8975C", color: "#B8975C" }}>
+                            + Adicionar documento por URL
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

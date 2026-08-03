@@ -5,6 +5,7 @@ import os
 import smtplib
 import threading
 import time
+import urllib.request as _urllib
 from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
@@ -22,7 +23,11 @@ from auth import authenticate, create_token, decode_token, create_user, delete_u
 import json
 import uuid
 
-from insurers import PDF_FOLDER, ESPECIAIS_FOLDER, DATA_DIR, derive_display_name, delete_pdf, delete_especial, sync_index, load_manifest, get_db
+from insurers import (
+    PDF_FOLDER, ESPECIAIS_FOLDER, DATA_DIR, PRODUCTS_FOLDER, SERVICES_FOLDER,
+    derive_display_name, delete_pdf, delete_especial, delete_product_pdf, delete_service_pdf,
+    sync_index, load_manifest, get_db,
+)
 from rag import (
     add_faq_entry,
     answer as rag_answer,
@@ -43,6 +48,8 @@ app = FastAPI(title="Piaseg Seguros API")
 
 ASSISTANCE_JSON_PATH = DATA_DIR / "assistance_contacts.json"
 QUIVER_JSON_PATH = DATA_DIR / "quiver_links.json"
+PRODUCTS_JSON_PATH = DATA_DIR / "products.json"
+SERVICES_JSON_PATH = DATA_DIR / "services.json"
 
 
 def _load_assistance() -> list:
@@ -176,15 +183,53 @@ def _watch_pdf_folder():
         time.sleep(PDF_WATCH_INTERVAL_SECONDS)
 
 
+def _load_products() -> list:
+    if not PRODUCTS_JSON_PATH.exists():
+        return []
+    return json.loads(PRODUCTS_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_products(data: list) -> None:
+    PRODUCTS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PRODUCTS_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_services() -> list:
+    if not SERVICES_JSON_PATH.exists():
+        return []
+    return json.loads(SERVICES_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_services(data: list) -> None:
+    SERVICES_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SERVICES_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _download_pdf(url: str) -> bytes:
+    req = _urllib.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; PiasegBot/1.0)"})
+    with _urllib.urlopen(req, timeout=30) as resp:
+        ct = resp.headers.get("Content-Type", "")
+        data = resp.read()
+    if "pdf" not in ct.lower() and not url.lower().split("?")[0].endswith(".pdf"):
+        if not data[:4] == b"%PDF":
+            raise ValueError(f"URL não retornou um PDF válido (Content-Type: {ct})")
+    return data
+
+
+def _index_file_background(folder, filename, pdf_bytes):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / filename).write_bytes(pdf_bytes)
+    sync_index()
+    invalidate_collection_cache()
+
+
 @app.on_event("startup")
 def on_startup():
-    for folder in (PDF_FOLDER, ESPECIAIS_FOLDER):
+    for folder in (PDF_FOLDER, ESPECIAIS_FOLDER, PRODUCTS_FOLDER, SERVICES_FOLDER):
         try:
             folder.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
-    # sync_index() removido do startup: evita carregar o modelo ONNX duas vezes (512MB Render)
-    # O watcher thread indexa novos PDFs após 60s do startup
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
 
 
@@ -583,6 +628,200 @@ def send_conversation_email(body: SendEmailRequest, user: dict = Depends(get_cur
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao enviar e-mail: {str(e)}")
+
+
+class CategoryCreate(BaseModel):
+    name: str
+
+
+class DocumentFromUrl(BaseModel):
+    name: str
+    url: str
+
+
+class DocumentUpdate(BaseModel):
+    name: str
+    url: str
+
+
+# ── PRODUTOS ──────────────────────────────────────────────────────────────────
+
+@app.get("/products")
+def list_products(user: dict = Depends(get_current_user)):
+    return _load_products()
+
+
+@app.post("/admin/products/categories", status_code=201)
+def create_product_category(body: CategoryCreate, user: dict = Depends(require_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Nome é obrigatório")
+    data = _load_products()
+    entry = {"id": f"pcat_{uuid.uuid4().hex[:8]}", "name": body.name.strip(), "documents": []}
+    data.append(entry)
+    _save_products(data)
+    return entry
+
+
+@app.put("/admin/products/categories/{cat_id}")
+def rename_product_category(cat_id: str, body: CategoryCreate, user: dict = Depends(require_admin)):
+    data = _load_products()
+    for cat in data:
+        if cat["id"] == cat_id:
+            cat["name"] = body.name.strip()
+            _save_products(data)
+            return cat
+    raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+
+@app.delete("/admin/products/categories/{cat_id}")
+def delete_product_category(cat_id: str, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_products()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    for doc in cat.get("documents", []):
+        bg.add_task(delete_product_pdf, doc["filename"])
+    _save_products([c for c in data if c["id"] != cat_id])
+    return {"ok": True}
+
+
+@app.post("/admin/products/{cat_id}/documents", status_code=201)
+def add_product_document(cat_id: str, body: DocumentFromUrl, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_products()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    try:
+        pdf_bytes = _download_pdf(body.url.strip())
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Falha ao baixar PDF: {e}")
+    doc_id = f"pdoc_{uuid.uuid4().hex[:8]}"
+    filename = f"{doc_id}.pdf"
+    bg.add_task(_index_file_background, PRODUCTS_FOLDER, filename, pdf_bytes)
+    doc = {"id": doc_id, "name": body.name.strip(), "source_url": body.url.strip(), "filename": filename, "status": "ok"}
+    cat["documents"].append(doc)
+    _save_products(data)
+    return doc
+
+
+@app.put("/admin/products/{cat_id}/documents/{doc_id}")
+def update_product_document(cat_id: str, doc_id: str, body: DocumentUpdate, user: dict = Depends(require_admin)):
+    data = _load_products()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    for doc in cat["documents"]:
+        if doc["id"] == doc_id:
+            doc["name"] = body.name.strip()
+            doc["source_url"] = body.url.strip()
+            _save_products(data)
+            return doc
+    raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+
+@app.delete("/admin/products/{cat_id}/documents/{doc_id}")
+def delete_product_document(cat_id: str, doc_id: str, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_products()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    doc = next((d for d in cat["documents"] if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+    bg.add_task(delete_product_pdf, doc["filename"])
+    cat["documents"] = [d for d in cat["documents"] if d["id"] != doc_id]
+    _save_products(data)
+    return {"ok": True}
+
+
+# ── SERVIÇOS 24HS ─────────────────────────────────────────────────────────────
+
+@app.get("/services")
+def list_services(user: dict = Depends(get_current_user)):
+    return _load_services()
+
+
+@app.post("/admin/services/categories", status_code=201)
+def create_service_category(body: CategoryCreate, user: dict = Depends(require_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Nome é obrigatório")
+    data = _load_services()
+    entry = {"id": f"scat_{uuid.uuid4().hex[:8]}", "name": body.name.strip(), "documents": []}
+    data.append(entry)
+    _save_services(data)
+    return entry
+
+
+@app.put("/admin/services/categories/{cat_id}")
+def rename_service_category(cat_id: str, body: CategoryCreate, user: dict = Depends(require_admin)):
+    data = _load_services()
+    for cat in data:
+        if cat["id"] == cat_id:
+            cat["name"] = body.name.strip()
+            _save_services(data)
+            return cat
+    raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+
+@app.delete("/admin/services/categories/{cat_id}")
+def delete_service_category(cat_id: str, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_services()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    for doc in cat.get("documents", []):
+        bg.add_task(delete_service_pdf, doc["filename"])
+    _save_services([c for c in data if c["id"] != cat_id])
+    return {"ok": True}
+
+
+@app.post("/admin/services/{cat_id}/documents", status_code=201)
+def add_service_document(cat_id: str, body: DocumentFromUrl, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_services()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    try:
+        pdf_bytes = _download_pdf(body.url.strip())
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Falha ao baixar PDF: {e}")
+    doc_id = f"sdoc_{uuid.uuid4().hex[:8]}"
+    filename = f"{doc_id}.pdf"
+    bg.add_task(_index_file_background, SERVICES_FOLDER, filename, pdf_bytes)
+    doc = {"id": doc_id, "name": body.name.strip(), "source_url": body.url.strip(), "filename": filename, "status": "ok"}
+    cat["documents"].append(doc)
+    _save_services(data)
+    return doc
+
+
+@app.put("/admin/services/{cat_id}/documents/{doc_id}")
+def update_service_document(cat_id: str, doc_id: str, body: DocumentUpdate, user: dict = Depends(require_admin)):
+    data = _load_services()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    for doc in cat["documents"]:
+        if doc["id"] == doc_id:
+            doc["name"] = body.name.strip()
+            doc["source_url"] = body.url.strip()
+            _save_services(data)
+            return doc
+    raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+
+@app.delete("/admin/services/{cat_id}/documents/{doc_id}")
+def delete_service_document(cat_id: str, doc_id: str, bg: BackgroundTasks, user: dict = Depends(require_admin)):
+    data = _load_services()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    doc = next((d for d in cat["documents"] if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+    bg.add_task(delete_service_pdf, doc["filename"])
+    cat["documents"] = [d for d in cat["documents"] if d["id"] != doc_id]
+    _save_services(data)
+    return {"ok": True}
 
 
 @app.get("/health")

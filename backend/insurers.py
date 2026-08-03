@@ -30,6 +30,8 @@ except Exception:
 SEARCH_DB_PATH = str(DATA_DIR / "search.db")
 MANIFEST_PATH = DATA_DIR / "indexed_manifest.json"
 ESPECIAIS_FOLDER = Path(os.getenv("ESPECIAIS_FOLDER_PATH", str(DATA_DIR / "especiais")))
+PRODUCTS_FOLDER = DATA_DIR / "products_pdfs"
+SERVICES_FOLDER = DATA_DIR / "services_pdfs"
 
 KNOWN_DISPLAY_NAMES = {
     "HDI Auto perfil 2026.pdf": "HDI",
@@ -146,7 +148,7 @@ def sync_index() -> list:
             return []
 
         pdf_files = []
-        for folder in (PDF_FOLDER, ESPECIAIS_FOLDER):
+        for folder in (PDF_FOLDER, ESPECIAIS_FOLDER, PRODUCTS_FOLDER, SERVICES_FOLDER):
             if not folder.exists():
                 continue
             try:
@@ -268,3 +270,23 @@ def delete_especial(filename: str) -> bool:
     _delete_chunks_and_manifest(filename)
     pdf_path.unlink()
     return True
+
+
+def delete_product_pdf(filename: str) -> bool:
+    for name in (_nfc(filename), _nfd(filename)):
+        pdf_path = PRODUCTS_FOLDER / name
+        if pdf_path.exists():
+            _delete_chunks_and_manifest(filename)
+            pdf_path.unlink()
+            return True
+    return False
+
+
+def delete_service_pdf(filename: str) -> bool:
+    for name in (_nfc(filename), _nfd(filename)):
+        pdf_path = SERVICES_FOLDER / name
+        if pdf_path.exists():
+            _delete_chunks_and_manifest(filename)
+            pdf_path.unlink()
+            return True
+    return False
