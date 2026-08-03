@@ -51,7 +51,7 @@ export default function AdminPage() {
   const replaceEspecialInputRef = useRef<HTMLInputElement>(null);
   const [replacingEspecial, setReplacingEspecial] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos">("produtos");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos" | "backup">("produtos");
 
   // Assistance tab state
   interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
@@ -130,6 +130,10 @@ export default function AdminPage() {
   const [editingQuiverId, setEditingQuiverId] = useState<string | null>(null);
   const [editQuiverName, setEditQuiverName] = useState("");
   const [editQuiverUrl, setEditQuiverUrl] = useState("");
+
+  // Backup tab state
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [backupMsg, setBackupMsg] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
@@ -384,6 +388,23 @@ export default function AdminPage() {
       const res = await fetch(`${API}/admin/quiver/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { setQuiverLinks((prev) => prev.filter((l) => l.id !== id)); setQuiverMsg(`✓ "${name}" removido.`); }
     } catch { /* silencioso */ }
+  }
+
+  async function handleDownloadBackup() {
+    setDownloadingBackup(true); setBackupMsg("");
+    try {
+      const res = await fetch(`${API}/admin/backup`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setBackupMsg("Erro ao gerar backup."); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `backup-piazinho-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      setBackupMsg("✓ Backup baixado com sucesso!");
+    } catch { setBackupMsg("Erro ao conectar ao servidor."); }
+    finally { setDownloadingBackup(false); }
   }
 
   async function loadEspeciais(t: string) {
@@ -697,6 +718,7 @@ export default function AdminPage() {
           <button style={tabStyle("quiver")} onClick={() => { setActiveTab("quiver"); setQuiverMsg(""); }}>🎬 Quiver</button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>💬 FAQ</button>
           <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>👥 Usuários</button>
+          <button style={tabStyle("backup")} onClick={() => { setActiveTab("backup"); setBackupMsg(""); }}>💾 Backup</button>
         </div>
 
         {/* ABA: Condições Gerais */}
@@ -1216,6 +1238,42 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "backup" && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Backup automático diário</h2>
+              <p className="text-xs text-gray-500 mb-4">Todo dia à meia-noite (horário de Brasília), o sistema gera um backup completo e envia automaticamente para <strong>franchising@piaseg.com.br</strong>. O arquivo ZIP contém todos os dados (usuários, FAQ, assistência, Quiver, categorias) e os PDFs indexados.</p>
+              <div className="rounded-xl p-4 mb-4" style={{ background: "#F5F2EC", border: "1px solid #EAE6DC" }}>
+                <p className="text-xs font-semibold mb-2" style={{ color: "#00213A" }}>O que está incluído no backup:</p>
+                <ul className="text-xs text-gray-600 flex flex-col gap-1">
+                  <li>✓ Usuários e senhas</li>
+                  <li>✓ Perguntas do FAQ</li>
+                  <li>✓ Contatos de Assistência 24hs</li>
+                  <li>✓ Links do Quiver</li>
+                  <li>✓ Categorias das Cond. Gerais e Serviços 24hs</li>
+                  <li>✓ Todos os PDFs indexados</li>
+                </ul>
+              </div>
+              <h2 className="text-sm font-semibold mb-2" style={{ color: "#00213A" }}>Baixar backup agora</h2>
+              <p className="text-xs text-gray-500 mb-3">Clique no botão abaixo para baixar um arquivo ZIP com todo o conteúdo atual. Recomendado antes de grandes atualizações.</p>
+              {backupMsg && (
+                <div className="text-xs px-3 py-2 rounded-lg mb-3"
+                  style={{ background: backupMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: backupMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                  {backupMsg}
+                </div>
+              )}
+              <button
+                onClick={handleDownloadBackup}
+                disabled={downloadingBackup}
+                className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60"
+                style={{ background: "#00213A" }}
+              >
+                {downloadingBackup ? "Gerando backup..." : "⬇️ Baixar Backup Completo"}
+              </button>
+            </div>
           </div>
         )}
       </div>

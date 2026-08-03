@@ -1,12 +1,14 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import io
 import os
 import smtplib
 import threading
 import time
 import urllib.request as _urllib
-from datetime import datetime
+import zipfile
+from datetime import datetime, timezone, timedelta
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -14,6 +16,7 @@ from email.mime.text import MIMEText
 from typing import List
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fpdf import FPDF
@@ -166,6 +169,86 @@ def _send_email_pdf(to_email: str, user_name: str, pdf_bytes: bytes) -> None:
         server.login(smtp_user, smtp_pass)
         server.sendmail(email_from, to_email, msg.as_string())
 
+def _generate_backup_zip() -> tuple:
+    buf = io.BytesIO()
+    stats: dict = {"jsons": [], "pdfs": [], "total_mb": 0.0}
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in ["users.json", "faq_data.json", "assistance_contacts.json", "quiver_links.json", "products.json", "services.json"]:
+            p = DATA_DIR / fname
+            if p.exists():
+                zf.write(p, fname)
+                stats["jsons"].append(fname)
+        for folder, prefix in [(PDF_FOLDER, "pdfs"), (PRODUCTS_FOLDER, "products_pdfs"), (ESPECIAIS_FOLDER, "especiais")]:
+            if folder.exists():
+                for pdf in sorted(folder.glob("*.pdf")):
+                    zf.write(pdf, f"{prefix}/{pdf.name}")
+                    stats["pdfs"].append(pdf.name)
+    data = buf.getvalue()
+    stats["total_mb"] = round(len(data) / 1024 / 1024, 2)
+    return data, stats
+
+
+def _send_backup_email(zip_bytes: bytes, stats: dict) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    email_from = os.getenv("EMAIL_FROM", smtp_user)
+    backup_to = os.getenv("BACKUP_EMAIL", email_from)
+
+    if not smtp_host or not smtp_user or not smtp_pass:
+        print("[backup] SMTP não configurado — backup por e-mail ignorado.")
+        return
+
+    msg = MIMEMultipart("mixed")
+    msg["From"] = f"Piazinho Backup <{email_from}>"
+    msg["To"] = backup_to
+    msg["Subject"] = f"Backup Piazinho - {datetime.now().strftime('%d/%m/%Y')}"
+
+    html = (
+        f"<html><body style='font-family:Arial,sans-serif;color:#111;line-height:1.6'>"
+        f"<h3 style='color:#00213A'>Backup automático do Piazinho</h3>"
+        f"<p>Data: <strong>{datetime.now().strftime('%d/%m/%Y às %H:%M')}</strong></p>"
+        f"<ul>"
+        f"<li>Arquivos de dados (JSON): {len(stats['jsons'])}</li>"
+        f"<li>PDFs indexados: {len(stats['pdfs'])}</li>"
+        f"<li>Tamanho total: <strong>{stats['total_mb']} MB</strong></li>"
+        f"</ul>"
+        f"<p>Guarde o arquivo <em>backup-piazinho.zip</em> em local seguro.</p>"
+        f"<p style='color:#888;font-size:12px'>Para restaurar, acesse o painel admin e use o botão Restaurar Backup.</p>"
+        f"</body></html>"
+    )
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    att = MIMEBase("application", "zip")
+    att.set_payload(zip_bytes)
+    encoders.encode_base64(att)
+    filename = f"backup-piazinho-{datetime.now().strftime('%Y%m%d')}.zip"
+    att.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(att)
+
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(email_from, backup_to, msg.as_string())
+    print(f"[backup] E-mail enviado para {backup_to} ({stats['total_mb']} MB)")
+
+
+def _run_daily_backup():
+    brt = timezone(timedelta(hours=-3))
+    while True:
+        try:
+            now = datetime.now(brt)
+            next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            wait = (next_midnight - now).total_seconds()
+            print(f"[backup] Próximo backup em {round(wait / 3600, 1)}h (meia-noite BRT)")
+            time.sleep(wait)
+            zip_bytes, stats = _generate_backup_zip()
+            _send_backup_email(zip_bytes, stats)
+        except Exception as e:
+            print(f"[backup] Erro: {e}")
+            time.sleep(3600)
+
+
 PDF_WATCH_INTERVAL_SECONDS = 120
 
 
@@ -242,6 +325,7 @@ def on_startup():
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
+    threading.Thread(target=_run_daily_backup, daemon=True).start()
 
 
 app.add_middleware(
@@ -856,7 +940,19 @@ def delete_service_document(cat_id: str, doc_id: str, bg: BackgroundTasks, user:
     return {"ok": True}
 
 
+@app.get("/admin/backup")
+def download_backup(user: dict = Depends(require_admin)):
+    zip_bytes, stats = _generate_backup_zip()
+    filename = f"backup-piazinho-{datetime.now().strftime('%Y%m%d-%H%M')}.zip"
+    print(f"[backup] Download manual: {stats['total_mb']} MB por {user.get('sub')}")
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "2734027-products-services"}
+    return {"status": "ok", "version": "backup-automatico"}
 
