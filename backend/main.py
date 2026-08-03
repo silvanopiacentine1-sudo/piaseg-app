@@ -826,5 +826,5 @@ def delete_service_document(cat_id: str, doc_id: str, bg: BackgroundTasks, user:
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2734027-products-services"}
 
