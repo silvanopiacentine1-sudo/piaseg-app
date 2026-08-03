@@ -715,6 +715,27 @@ def add_product_document(cat_id: str, body: DocumentFromUrl, bg: BackgroundTasks
     return doc
 
 
+@app.post("/admin/products/{cat_id}/documents/upload", status_code=201)
+async def upload_product_document(cat_id: str, name: str, file: UploadFile = File(...), user: dict = Depends(require_admin)):
+    data = _load_products()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    pdf_bytes = await file.read()
+    if pdf_bytes[:4] != b"%PDF":
+        raise HTTPException(status_code=422, detail="Arquivo não é um PDF válido")
+    doc_id = f"pdoc_{uuid.uuid4().hex[:8]}"
+    filename = f"{doc_id}.pdf"
+    PRODUCTS_FOLDER.mkdir(parents=True, exist_ok=True)
+    (PRODUCTS_FOLDER / filename).write_bytes(pdf_bytes)
+    sync_index()
+    invalidate_collection_cache()
+    doc = {"id": doc_id, "name": name.strip(), "source_url": "", "filename": filename, "status": "ok"}
+    cat["documents"].append(doc)
+    _save_products(data)
+    return doc
+
+
 @app.put("/admin/products/{cat_id}/documents/{doc_id}")
 def update_product_document(cat_id: str, doc_id: str, body: DocumentUpdate, user: dict = Depends(require_admin)):
     data = _load_products()
