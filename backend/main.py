@@ -317,6 +317,67 @@ def _index_file_background(folder, filename, pdf_bytes):
     invalidate_collection_cache()
 
 
+def _check_disk_health() -> dict:
+    from insurers import DATA_DIR
+    import shutil
+    persistent = str(DATA_DIR) == "/data"
+    writable = False
+    free_mb = 0
+    try:
+        test_file = DATA_DIR / ".write_test"
+        test_file.write_text("ok")
+        test_file.unlink()
+        writable = True
+    except Exception:
+        pass
+    try:
+        free_mb = round(shutil.disk_usage(str(DATA_DIR)).free / 1024 / 1024)
+    except Exception:
+        pass
+    return {"data_dir": str(DATA_DIR), "persistent": persistent, "writable": writable, "free_mb": free_mb}
+
+
+def _startup_disk_check():
+    health = _check_disk_health()
+    if health["persistent"] and health["writable"]:
+        print(f"[disco] ✓ Disco persistente em /data — {health['free_mb']} MB livres")
+        return
+    # Disco não está correto — envia alerta por e-mail
+    print(f"[disco] ⚠️  ALERTA: DATA_DIR={health['data_dir']} — dados NÃO persistirão entre deploys!")
+    try:
+        smtp_host = os.getenv("SMTP_HOST", "")
+        smtp_port = int(os.getenv("SMTP_PORT", "465"))
+        smtp_user = os.getenv("SMTP_USER", "")
+        smtp_pass = os.getenv("SMTP_PASS", "")
+        email_from = os.getenv("EMAIL_FROM", smtp_user)
+        if not smtp_host or not smtp_user:
+            return
+        msg = MIMEMultipart("mixed")
+        msg["From"] = f"Piazinho Alerta <{email_from}>"
+        msg["To"] = email_from
+        msg["Subject"] = f"⚠️ ALERTA: Disco Piazinho não configurado — {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        html = (
+            f"<html><body style='font-family:Arial,sans-serif;color:#111'>"
+            f"<h2 style='color:#dc2626'>⚠️ ATENÇÃO: dados em risco!</h2>"
+            f"<p>O serviço Piazinho iniciou sem o disco persistente configurado corretamente.</p>"
+            f"<ul>"
+            f"<li><strong>DATA_DIR atual:</strong> {health['data_dir']}</li>"
+            f"<li><strong>Esperado:</strong> /data</li>"
+            f"<li><strong>Gravável:</strong> {'Sim' if health['writable'] else 'Não'}</li>"
+            f"</ul>"
+            f"<p style='color:#dc2626'><strong>Todos os dados cadastrados serão perdidos no próximo deploy!</strong></p>"
+            f"<p>Acesse o Render Dashboard → serviço piaseg-app → Disks e verifique se o disco piaseg-data está montado em /data.</p>"
+            f"</body></html>"
+        )
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(email_from, email_from, msg.as_string())
+        print("[disco] Alerta enviado por e-mail.")
+    except Exception as e:
+        print(f"[disco] Falha ao enviar alerta: {e}")
+
+
 @app.on_event("startup")
 def on_startup():
     for folder in (PDF_FOLDER, ESPECIAIS_FOLDER, PRODUCTS_FOLDER, SERVICES_FOLDER):
@@ -324,6 +385,7 @@ def on_startup():
             folder.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
+    _startup_disk_check()
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
     threading.Thread(target=_run_daily_backup, daemon=True).start()
 
@@ -938,6 +1000,11 @@ def delete_service_document(cat_id: str, doc_id: str, bg: BackgroundTasks, user:
     cat["documents"] = [d for d in cat["documents"] if d["id"] != doc_id]
     _save_services(data)
     return {"ok": True}
+
+
+@app.get("/admin/disk-status")
+def disk_status(user: dict = Depends(require_admin)):
+    return _check_disk_health()
 
 
 @app.get("/admin/backup")

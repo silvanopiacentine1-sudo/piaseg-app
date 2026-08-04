@@ -134,6 +134,8 @@ export default function AdminPage() {
   // Backup tab state
   const [downloadingBackup, setDownloadingBackup] = useState(false);
   const [backupMsg, setBackupMsg] = useState("");
+  interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
+  const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
@@ -146,8 +148,15 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t)]);
+    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t), loadDiskStatus(t)]);
     setLoading(false);
+  }
+
+  async function loadDiskStatus(t: string) {
+    try {
+      const res = await fetch(`${API}/admin/disk-status`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setDiskStatus(await res.json());
+    } catch { /* silencioso */ }
   }
 
   async function loadProducts(t: string) {
@@ -1243,11 +1252,32 @@ export default function AdminPage() {
 
         {activeTab === "backup" && (
           <div className="flex flex-col gap-4">
+            {/* Status do disco */}
+            <div className="rounded-2xl shadow-sm p-5" style={{
+              background: diskStatus == null ? "#F5F2EC" : diskStatus.persistent && diskStatus.writable ? "#f0fdf4" : "#fef2f2",
+              border: `1px solid ${diskStatus == null ? "#EAE6DC" : diskStatus.persistent && diskStatus.writable ? "#bbf7d0" : "#fecaca"}`
+            }}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base">{diskStatus == null ? "⏳" : diskStatus.persistent && diskStatus.writable ? "✅" : "⚠️"}</span>
+                <h2 className="text-sm font-semibold" style={{ color: diskStatus?.persistent && diskStatus?.writable ? "#15803d" : "#dc2626" }}>
+                  {diskStatus == null ? "Verificando disco..." : diskStatus.persistent && diskStatus.writable ? "Disco persistente ativo — dados seguros" : "ATENÇÃO: disco não configurado corretamente"}
+                </h2>
+              </div>
+              {diskStatus && (
+                <p className="text-xs" style={{ color: diskStatus.persistent && diskStatus.writable ? "#166534" : "#991b1b" }}>
+                  {diskStatus.persistent && diskStatus.writable
+                    ? `Dados salvos em /data — ${diskStatus.free_mb} MB livres. Deploys não apagam seus dados.`
+                    : `Dados salvos em ${diskStatus.data_dir} (pasta temporária). Configure o disco no Render Dashboard!`}
+                </p>
+              )}
+            </div>
+
+            {/* Backup automático */}
             <div className="bg-white rounded-2xl shadow-sm p-5">
               <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Backup automático diário</h2>
-              <p className="text-xs text-gray-500 mb-4">Todo dia à meia-noite (horário de Brasília), o sistema gera um backup completo e envia automaticamente para <strong>franchising@piaseg.com.br</strong>. O arquivo ZIP contém todos os dados (usuários, FAQ, assistência, Quiver, categorias) e os PDFs indexados.</p>
+              <p className="text-xs text-gray-500 mb-4">Todo dia à meia-noite (horário de Brasília), o sistema gera um backup completo e envia automaticamente para <strong>franchising@piaseg.com.br</strong>.</p>
               <div className="rounded-xl p-4 mb-4" style={{ background: "#F5F2EC", border: "1px solid #EAE6DC" }}>
-                <p className="text-xs font-semibold mb-2" style={{ color: "#00213A" }}>O que está incluído no backup:</p>
+                <p className="text-xs font-semibold mb-2" style={{ color: "#00213A" }}>Conteúdo do backup:</p>
                 <ul className="text-xs text-gray-600 flex flex-col gap-1">
                   <li>✓ Usuários e senhas</li>
                   <li>✓ Perguntas do FAQ</li>
@@ -1258,7 +1288,7 @@ export default function AdminPage() {
                 </ul>
               </div>
               <h2 className="text-sm font-semibold mb-2" style={{ color: "#00213A" }}>Baixar backup agora</h2>
-              <p className="text-xs text-gray-500 mb-3">Clique no botão abaixo para baixar um arquivo ZIP com todo o conteúdo atual. Recomendado antes de grandes atualizações.</p>
+              <p className="text-xs text-gray-500 mb-3">Recomendado antes de grandes atualizações.</p>
               {backupMsg && (
                 <div className="text-xs px-3 py-2 rounded-lg mb-3"
                   style={{ background: backupMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: backupMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
