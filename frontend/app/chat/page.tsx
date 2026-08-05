@@ -53,12 +53,19 @@ function renderMessage(text: string): ReactNode {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+interface CategoryItem { id: string; name: string; type: "product" | "service"; docs: { id: string; name: string }[] }
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   sources?: { source: string; page: number }[];
   insurerOptions?: string[];
   isEndConfirm?: boolean;
+  isCategorySelect?: boolean;
+  categoryOptions?: CategoryItem[];
+  isInsurerSelect?: boolean;
+  insurerSelectOptions?: string[];
+  selectedCategoryName?: string;
 }
 
 export default function ChatPage() {
@@ -71,6 +78,8 @@ export default function ChatPage() {
   const [token, setToken] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [chatReady, setChatReady] = useState(false);
+  const [chatContext, setChatContext] = useState<{ category: string; insurer: string } | null>(null);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
   const [showQuiver, setShowQuiver] = useState(false);
@@ -99,10 +108,29 @@ export default function ChatPage() {
       .then((list) => setQuiverLinks(Array.isArray(list) ? list : []))
       .catch(() => {});
 
-    setMessages([{
+    const welcome: Message = {
       role: "assistant",
       content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o **Piazinho**, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
-    }]);
+    };
+
+    Promise.all([
+      fetch(`${API}/products`, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json()).catch(() => []),
+      fetch(`${API}/services`, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json()).catch(() => []),
+    ]).then(([products, services]) => {
+      const cats: CategoryItem[] = [
+        ...(Array.isArray(products) ? products.filter((c: CategoryItem) => c.docs?.length > 0 || (c as any).documents?.length > 0).map((c: any) => ({ id: c.id, name: c.name, type: "product" as const, docs: c.documents ?? c.docs ?? [] })) : []),
+        ...(Array.isArray(services) ? services.filter((c: CategoryItem) => c.docs?.length > 0 || (c as any).documents?.length > 0).map((c: any) => ({ id: c.id, name: c.name, type: "service" as const, docs: c.documents ?? c.docs ?? [] })) : []),
+      ];
+      if (cats.length === 0) {
+        setMessages([welcome]);
+        setChatReady(true);
+      } else {
+        setMessages([
+          welcome,
+          { role: "assistant", content: "Sobre qual categoria você gostaria de conversar hoje?", isCategorySelect: true, categoryOptions: cats },
+        ]);
+      }
+    });
   }, [router]);
 
   useEffect(() => {
@@ -133,13 +161,56 @@ export default function ChatPage() {
     }
   }
 
+  function selectCategory(cat: CategoryItem) {
+    setMessages((prev) => [
+      ...prev.map((m) => ({ ...m, isCategorySelect: false })),
+      { role: "user", content: cat.name },
+    ]);
+    const docsWithName = cat.docs.filter((d) => d.name);
+    if (docsWithName.length === 0) {
+      setChatContext({ category: cat.name, insurer: "" });
+      setMessages((prev) => [...prev, { role: "assistant", content: `Ótimo! Pode me fazer sua pergunta sobre **${cat.name}**.` }]);
+      setChatReady(true);
+    } else if (docsWithName.length === 1) {
+      setChatContext({ category: cat.name, insurer: docsWithName[0].name });
+      setMessages((prev) => [...prev, { role: "assistant", content: `Ótimo! Pode me fazer sua pergunta sobre **${docsWithName[0].name}** — ${cat.name}.` }]);
+      setChatReady(true);
+    } else {
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "De qual seguradora você gostaria de saber mais?",
+        isInsurerSelect: true,
+        insurerSelectOptions: docsWithName.map((d) => d.name),
+        selectedCategoryName: cat.name,
+      }]);
+    }
+  }
+
+  function selectInsurerFromCategory(categoryName: string, insurerName: string) {
+    setMessages((prev) => [
+      ...prev.map((m) => ({ ...m, isInsurerSelect: false })),
+      { role: "user", content: insurerName },
+      { role: "assistant", content: `Perfeito! Pode me fazer sua pergunta sobre **${insurerName}**.` },
+    ]);
+    setChatContext({ category: categoryName, insurer: insurerName });
+    setChatReady(true);
+  }
+
   function send() {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !chatReady) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
-    const question = pendingQuestion ? `${pendingQuestion} (seguradora: ${text})` : text;
-    ask(question);
+    if (pendingQuestion) {
+      ask(`${pendingQuestion} (seguradora: ${text})`);
+    } else {
+      const ctx = chatContext
+        ? chatContext.insurer
+          ? ` (categoria: ${chatContext.category}, seguradora: ${chatContext.insurer})`
+          : ` (categoria: ${chatContext.category})`
+        : "";
+      ask(`${text}${ctx}`);
+    }
   }
 
   function selectInsurer(insurer: string) {
@@ -325,6 +396,36 @@ export default function ChatPage() {
                   ))}
                 </div>
               )}
+              {msg.isCategorySelect && msg.categoryOptions && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {msg.categoryOptions.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => selectCategory(cat)}
+                      disabled={loading}
+                      className="text-xs px-3 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
+                      style={{ borderColor: "#B8975C", color: "#B8975C", background: "white" }}
+                    >
+                      {cat.type === "product" ? "📄" : "🔧"} {cat.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {msg.isInsurerSelect && msg.insurerSelectOptions && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {msg.insurerSelectOptions.map((ins) => (
+                    <button
+                      key={ins}
+                      onClick={() => selectInsurerFromCategory(msg.selectedCategoryName!, ins)}
+                      disabled={loading}
+                      className="text-xs px-3 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
+                      style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
+                    >
+                      {ins}
+                    </button>
+                  ))}
+                </div>
+              )}
               {msg.insurerOptions && i === messages.length - 1 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {msg.insurerOptions.map((opt) => (
@@ -392,26 +493,6 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Sugestões rápidas — só na abertura */}
-      {messages.length <= 1 && (
-        <div className="px-4 pt-2 flex gap-2 overflow-x-auto flex-shrink-0 scrollbar-hide">
-          {[
-            "O que cobre em caso de roubo?",
-            "Como funciona a perda total?",
-            "Cobertura de terceiros HDI",
-            "Assistência 24h Porto Seguro",
-          ].map((s) => (
-            <button
-              key={s}
-              onClick={() => { setInput(s); }}
-              className="flex-shrink-0 text-xs px-3 py-2 rounded-full border transition-colors"
-              style={{ borderColor: "#B8975C", color: "#B8975C", background: "white" }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Modal do Portifólio */}
       {showPortfolio && (
@@ -581,8 +662,8 @@ export default function ChatPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder={pendingQuestion ? "Digite ou clique na seguradora..." : "Digite sua dúvida sobre seguros..."}
-          disabled={loading || sendingEmail}
+          placeholder={!chatReady ? "Selecione a categoria e seguradora acima..." : pendingQuestion ? "Digite ou clique na seguradora..." : "Digite sua dúvida sobre seguros..."}
+          disabled={loading || sendingEmail || !chatReady}
           className="flex-1 px-4 py-3 rounded-xl text-sm outline-none border"
           style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
           onFocus={(e) => (e.target.style.borderColor = "#B8975C")}
@@ -590,7 +671,7 @@ export default function ChatPage() {
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim() || sendingEmail}
+          disabled={loading || !input.trim() || sendingEmail || !chatReady}
           className="w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           style={{ background: "#B8975C" }}
         >
