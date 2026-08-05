@@ -862,7 +862,7 @@ def add_product_document(cat_id: str, body: DocumentFromUrl, bg: BackgroundTasks
 
 
 @app.post("/admin/products/{cat_id}/documents/upload", status_code=201)
-async def upload_product_document(cat_id: str, name: str, file: UploadFile = File(...), user: dict = Depends(require_admin)):
+async def upload_product_document(cat_id: str, name: str, bg: BackgroundTasks, file: UploadFile = File(...), user: dict = Depends(require_admin)):
     data = _load_products()
     cat = next((c for c in data if c["id"] == cat_id), None)
     if not cat:
@@ -874,11 +874,10 @@ async def upload_product_document(cat_id: str, name: str, file: UploadFile = Fil
     filename = f"{doc_id}.pdf"
     PRODUCTS_FOLDER.mkdir(parents=True, exist_ok=True)
     (PRODUCTS_FOLDER / filename).write_bytes(pdf_bytes)
-    sync_index()
-    invalidate_collection_cache()
     doc = {"id": doc_id, "name": name.strip(), "source_url": "", "filename": filename, "status": "ok"}
     cat["documents"].append(doc)
     _save_products(data)
+    bg.add_task(_index_file_background, PRODUCTS_FOLDER, filename, pdf_bytes)
     return doc
 
 
