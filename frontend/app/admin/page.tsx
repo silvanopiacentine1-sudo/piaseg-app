@@ -719,7 +719,7 @@ export default function AdminPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm overflow-x-auto">
+        <div className="flex flex-wrap gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm">
           <button style={tabStyle("produtos")} onClick={() => { setActiveTab("produtos"); setProductMsg(""); }}>📄 Cond. Gerais</button>
           <button style={tabStyle("servicos")} onClick={() => { setActiveTab("servicos"); setServiceMsg(""); }}>🔧 Serviços 24hs</button>
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
