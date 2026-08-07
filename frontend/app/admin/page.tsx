@@ -121,6 +121,15 @@ export default function AdminPage() {
   const [docUploadFile, setDocUploadFile] = useState<File | null>(null);
   const [uploadingProductDoc, setUploadingProductDoc] = useState(false);
 
+  // Edit existing product doc state
+  const [editingProductDoc, setEditingProductDoc] = useState<{ docId: string; catId: string } | null>(null);
+  const [editDocName, setEditDocName] = useState("");
+  const [editDocInputMode, setEditDocInputMode] = useState<"url" | "upload">("url");
+  const [editDocUrl, setEditDocUrl] = useState("");
+  const [editDocFile, setEditDocFile] = useState<File | null>(null);
+  const [editDocMsg, setEditDocMsg] = useState("");
+  const [savingEditDoc, setSavingEditDoc] = useState(false);
+
   // Quiver tab state
   const [quiverLinks, setQuiverLinks] = useState<QuiverItem[]>([]);
   const [newQuiverName, setNewQuiverName] = useState("");
@@ -234,6 +243,46 @@ export default function AdminPage() {
       await fetch(`${API}/admin/products/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       await loadProducts(token);
     } catch { /* silencioso */ }
+  }
+
+  async function handleSaveProductDoc(catId: string, docId: string, originalUrl: string) {
+    if (!editDocName.trim()) return;
+    setSavingEditDoc(true); setEditDocMsg("");
+    try {
+      if (editDocInputMode === "url") {
+        if (!editDocUrl.trim()) return;
+        if (editDocUrl.trim() === originalUrl) {
+          // Só renomear via PUT
+          const res = await fetch(`${API}/admin/products/${catId}/documents/${docId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: editDocName.trim(), url: originalUrl }),
+          });
+          if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+        } else {
+          // URL diferente: adiciona novo e remove antigo
+          const res = await fetch(`${API}/admin/products/${catId}/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: editDocName.trim(), url: editDocUrl.trim() }),
+          });
+          if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+          await fetch(`${API}/admin/products/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+        }
+      } else {
+        // Upload de arquivo
+        if (!editDocFile) return;
+        const fd = new FormData();
+        fd.append("file", editDocFile);
+        const res = await fetch(`${API}/admin/products/${catId}/documents/upload?name=${encodeURIComponent(editDocName.trim())}`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd,
+        });
+        if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+        await fetch(`${API}/admin/products/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      }
+      setEditingProductDoc(null); setEditDocMsg("");
+      await loadProducts(token);
+    } catch { setEditDocMsg("Erro ao conectar."); } finally { setSavingEditDoc(false); }
   }
 
   async function handleCreateServiceCat(e: React.FormEvent) {
@@ -699,7 +748,7 @@ export default function AdminPage() {
         <div className="flex items-center gap-2">
           <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30" style={{ background: "white" }}>
             <img
-              src="/mascote.png"
+              src="/piazinho/mascote.png"
               alt="Piazinho"
               style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
             />
@@ -775,12 +824,47 @@ export default function AdminPage() {
                     {expandedProductCat === cat.id && (
                       <div className="border-t px-4 py-3 flex flex-col gap-2" style={{ borderColor: "#F5F2EC", background: "#FAFAF8" }}>
                         {cat.documents.map((doc) => (
-                          <div key={doc.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
-                              <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>
-                            </div>
-                            <button onClick={() => handleDeleteProductDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500 flex-shrink-0">Remover</button>
+                          <div key={doc.id} className="border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
+                            {editingProductDoc?.docId === doc.id ? (
+                              <div className="py-2 flex flex-col gap-2">
+                                <input value={editDocName} onChange={(e) => setEditDocName(e.target.value)} placeholder="Nome da seguradora"
+                                  className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                                <div className="flex rounded-lg overflow-hidden border text-xs" style={{ borderColor: "#EAE6DC" }}>
+                                  <button type="button" onClick={() => setEditDocInputMode("url")} className="flex-1 py-1.5 font-medium" style={{ background: editDocInputMode === "url" ? "#00213A" : "#F5F2EC", color: editDocInputMode === "url" ? "#fff" : "#666" }}>🔗 Por link (URL)</button>
+                                  <button type="button" onClick={() => setEditDocInputMode("upload")} className="flex-1 py-1.5 font-medium" style={{ background: editDocInputMode === "upload" ? "#00213A" : "#F5F2EC", color: editDocInputMode === "upload" ? "#fff" : "#666" }}>📤 Enviar arquivo</button>
+                                </div>
+                                {editDocInputMode === "url" ? (
+                                  <input value={editDocUrl} onChange={(e) => setEditDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                                    className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                                ) : (
+                                  <label className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#666" }}>
+                                    <span>📄</span>
+                                    <span>{editDocFile ? editDocFile.name : "Clique para selecionar o PDF..."}</span>
+                                    <input type="file" accept=".pdf" className="hidden" onChange={(e) => setEditDocFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                                {editDocMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: editDocMsg.startsWith("Erro") ? "#fef2f2" : "#f0fdf4", color: editDocMsg.startsWith("Erro") ? "#dc2626" : "#16a34a" }}>{editDocMsg}</p>}
+                                <div className="flex gap-2 justify-end">
+                                  <button type="button" onClick={() => { setEditingProductDoc(null); setEditDocMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                                  <button type="button" onClick={() => handleSaveProductDoc(cat.id, doc.id, doc.source_url)}
+                                    disabled={savingEditDoc || !editDocName.trim() || (editDocInputMode === "url" ? !editDocUrl.trim() : !editDocFile)}
+                                    className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
+                                    {savingEditDoc ? "Salvando..." : "Salvar"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2 py-1.5">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
+                                  {doc.source_url && <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>}
+                                </div>
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  <button onClick={() => { setEditingProductDoc({ docId: doc.id, catId: cat.id }); setEditDocName(doc.name); setEditDocUrl(doc.source_url || ""); setEditDocInputMode(doc.source_url ? "url" : "upload"); setEditDocFile(null); setEditDocMsg(""); }} className="text-xs px-2.5 py-1 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Alterar</button>
+                                  <button onClick={() => handleDeleteProductDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500">Remover</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                         {addDocToProduct === cat.id ? (

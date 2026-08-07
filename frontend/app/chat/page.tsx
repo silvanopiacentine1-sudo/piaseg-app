@@ -316,7 +316,7 @@ export default function ChatPage() {
         <div className="flex items-center gap-2">
           <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30" style={{ background: "white" }}>
             <img
-              src="/mascote.png"
+              src="/piazinho/mascote.png"
               alt="Piazinho"
               style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
             />
@@ -370,7 +370,7 @@ export default function ChatPage() {
             {msg.role === "assistant" && (
               <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mr-2 mt-0.5 border border-amber-200" style={{ background: "white" }}>
                 <img
-                  src="/mascote.png"
+                  src="/piazinho/mascote.png"
                   alt="Piazinho"
                   style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
                 />
@@ -473,7 +473,7 @@ export default function ChatPage() {
           <div className="flex justify-start">
             <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mr-2 border border-amber-200" style={{ background: "white" }}>
               <img
-                src="/mascote.png"
+                src="/piazinho/mascote.png"
                 alt="Piazinho"
                 style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 8%" }}
               />

@@ -52,7 +52,7 @@ export default function LoginPage() {
           style={{ background: "white", borderBottom: "3px solid #B8975C" }}
         >
           <img
-            src="/logo-piaseg.png"
+            src="/piazinho/logo-piaseg.png"
             alt="Piaseg Seguros Franchising"
             style={{ height: "72px", width: "auto" }}
           />
