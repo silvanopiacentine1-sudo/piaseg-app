@@ -492,7 +492,11 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
         }
 
     insurer_display = get_insurer_display_name(source_filter)
-    result = rag_answer(question, source_filter=source_filter, insurer_display=insurer_display)
+    try:
+        result = rag_answer(question, source_filter=source_filter, insurer_display=insurer_display)
+    except Exception as e:
+        print(f"[chat] Erro no rag_answer: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {type(e).__name__}: {str(e)[:200]}")
     result["needs_insurer"] = False
     return result
 
