@@ -51,7 +51,7 @@ function renderMessage(text: string): ReactNode {
   return <>{result}</>;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 interface CategoryItem { id: string; name: string; type: "product" | "service"; docs: { id: string; name: string }[] }
 
