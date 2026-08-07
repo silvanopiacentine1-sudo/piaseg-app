@@ -860,7 +860,7 @@ export default function AdminPage() {
                                   {doc.source_url && <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>}
                                 </div>
                                 <div className="flex gap-1.5 flex-shrink-0">
-                                  <button onClick={() => { setEditingProductDoc({ docId: doc.id, catId: cat.id }); setEditDocName(doc.name); setEditDocUrl(doc.source_url || ""); setEditDocInputMode(doc.source_url ? "url" : "upload"); setEditDocFile(null); setEditDocMsg(""); }} className="text-xs px-2.5 py-1 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Alterar</button>
+                                  <button onClick={() => { setEditingProductDoc({ docId: doc.id, catId: cat.id }); setEditDocName(doc.name); setEditDocUrl(doc.source_url || ""); setEditDocInputMode(doc.source_url ? "url" : "upload"); setEditDocFile(null); setEditDocMsg(""); }} className="text-xs px-2.5 py-1 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
                                   <button onClick={() => handleDeleteProductDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500">Remover</button>
                                 </div>
                               </div>
