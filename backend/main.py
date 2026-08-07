@@ -1054,6 +1054,10 @@ def diag(user: dict = Depends(require_admin)):
 def health():
     return {"status": "ok", "version": "backup-automatico"}
 
+@app.get("/test-html", response_class=Response)
+def test_html():
+    return Response(content="<html><body><h1>HTML funcionando!</h1><p>Se você ver isso, HTML carrega normalmente.</p></body></html>", media_type="text/html")
+
 
 # Servir o frontend Next.js estático em /piazinho/
 _STATIC_PIAZINHO = os.path.join(os.path.dirname(__file__), "static_piazinho")
