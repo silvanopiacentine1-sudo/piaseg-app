@@ -53,7 +53,7 @@ function renderMessage(text: string): ReactNode {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-interface CategoryItem { id: string; name: string; type: "product" | "service"; docs: { id: string; name: string }[] }
+interface CategoryItem { id: string; name: string; type: "product" | "service"; docs: { id: string; name: string; filename?: string }[] }
 
 interface Message {
   role: "user" | "assistant";
@@ -65,6 +65,7 @@ interface Message {
   categoryOptions?: CategoryItem[];
   isInsurerSelect?: boolean;
   insurerSelectOptions?: string[];
+  insurerSelectDocs?: { id: string; name: string; filename?: string }[];
   selectedCategoryName?: string;
 }
 
@@ -134,13 +135,13 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function ask(question: string, queryType: string = "general") {
+  async function ask(question: string, queryType: string = "general", sourceFilter: string = "") {
     setLoading(true);
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question, query_type: queryType }),
+        body: JSON.stringify({ question, query_type: queryType, source_filter: sourceFilter }),
       });
       if (res.status === 401) { router.replace("/"); return; }
       if (!res.ok) {
@@ -177,14 +178,13 @@ export default function ChatPage() {
       { role: "user", content: cat.name },
     ]);
     const docsWithName = cat.docs.filter((d) => d.name);
+    const q = pendingQuestion ?? "";
     if (docsWithName.length === 0) {
-      const q = pendingQuestion!;
       setPendingQuestion(null);
-      ask(`${q} (categoria: ${cat.name})`);
+      ask(q || cat.name);
     } else if (docsWithName.length === 1) {
-      const q = pendingQuestion!;
       setPendingQuestion(null);
-      ask(`${q} (categoria: ${cat.name}, seguradora: ${docsWithName[0].name})`);
+      ask(q || docsWithName[0].name, "general", docsWithName[0].filename ?? "");
     } else {
       setPendingCategory(cat.name);
       setMessages((prev) => [...prev, {
@@ -193,20 +193,20 @@ export default function ChatPage() {
         isInsurerSelect: true,
         insurerSelectOptions: docsWithName.map((d) => d.name),
         selectedCategoryName: cat.name,
+        insurerSelectDocs: docsWithName,
       }]);
     }
   }
 
-  function selectInsurerFromCategory(categoryName: string, insurerName: string) {
+  function selectInsurerFromCategory(insurerName: string, filename: string) {
     setMessages((prev) => [
       ...prev.map((m) => ({ ...m, isInsurerSelect: false })),
       { role: "user", content: insurerName },
     ]);
-    const q = pendingQuestion!;
-    const cat = pendingCategory || categoryName;
+    const q = pendingQuestion ?? insurerName;
     setPendingQuestion(null);
     setPendingCategory(null);
-    ask(`${q} (categoria: ${cat}, seguradora: ${insurerName})`);
+    ask(q, "general", filename);
   }
 
   function send() {
@@ -421,17 +421,20 @@ export default function ChatPage() {
               )}
               {msg.isInsurerSelect && msg.insurerSelectOptions && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {msg.insurerSelectOptions.map((ins) => (
-                    <button
-                      key={ins}
-                      onClick={() => selectInsurerFromCategory(msg.selectedCategoryName!, ins)}
-                      disabled={loading}
-                      className="text-xs px-3 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
-                      style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
-                    >
-                      {ins}
-                    </button>
-                  ))}
+                  {msg.insurerSelectOptions.map((ins) => {
+                    const doc = msg.insurerSelectDocs?.find((d) => d.name === ins);
+                    return (
+                      <button
+                        key={ins}
+                        onClick={() => selectInsurerFromCategory(ins, doc?.filename ?? "")}
+                        disabled={loading}
+                        className="text-xs px-3 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
+                        style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
+                      >
+                        {ins}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {msg.insurerOptions && i === messages.length - 1 && (

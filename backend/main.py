@@ -433,6 +433,7 @@ class LoginRequest(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     query_type: str = "general"  # "general" | "portfolio" | "assistance"
+    source_filter: str = ""  # filename direto (pdoc_*.pdf) — quando o frontend já sabe qual doc usar
 
 
 class FaqEntry(BaseModel):
@@ -499,8 +500,8 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
         faq_result["needs_insurer"] = False
         return faq_result
 
-    # 2. Detecta seguradora/categoria no texto da pergunta
-    source_filter = detect_insurer(question)
+    # 2. Usa source_filter passado diretamente pelo frontend (mais confiável que parsing de texto)
+    source_filter = body.source_filter.strip() or detect_insurer(question)
     if not source_filter:
         return {
             "answer": "Para responder com precisão, preciso saber mais. Sobre qual categoria é a sua dúvida?",
