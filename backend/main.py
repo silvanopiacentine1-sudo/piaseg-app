@@ -19,6 +19,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Uplo
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 from pydantic import BaseModel
 
@@ -1052,4 +1053,10 @@ def diag(user: dict = Depends(require_admin)):
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "backup-automatico"}
+
+
+# Servir o frontend Next.js estático em /piazinho/
+_STATIC_PIAZINHO = Path(__file__).parent / "static_piazinho"
+if _STATIC_PIAZINHO.exists():
+    app.mount("/piazinho", StaticFiles(directory=str(_STATIC_PIAZINHO), html=True), name="piazinho")
 
