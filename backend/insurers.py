@@ -154,8 +154,8 @@ def save_manifest(data: dict) -> None:
 
 
 def sync_index() -> list:
-    if not _sync_lock.acquire(blocking=False):
-        return []  # Outra indexação já está em andamento
+    # Bloqueia até o lock estar disponível (não pula — garante que toda adição/remoção seja processada)
+    _sync_lock.acquire(blocking=True)
     try:
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -172,34 +172,49 @@ def sync_index() -> list:
             except (PermissionError, OSError):
                 pass
 
-        if not pdf_files:
-            return []
-
         manifest = load_manifest()
-
-        # Se o banco está vazio mas o manifest tem entradas, força re-indexação
         conn = get_db()
-        count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-        conn.close()
-        if count == 0 and manifest:
-            manifest = {}
 
-        # Usa NFC como chave canônica; ignora entradas NFD antigas no manifest
-        needs_update = [
-            p for p in pdf_files
-            if manifest.get(_nfc(p.name)) != p.stat().st_mtime
-            and manifest.get(_nfd(p.name)) != p.stat().st_mtime
-        ]
-        if not needs_update:
+        # 1. Remove chunks de arquivos que não existem mais no disco
+        all_pdf_names_nfc = {_nfc(p.name) for p in pdf_files}
+        stale = conn.execute("SELECT DISTINCT source FROM chunks").fetchall()
+        for (src,) in stale:
+            if _nfc(src) not in all_pdf_names_nfc:
+                conn.execute("DELETE FROM chunks WHERE source = ? OR source = ?", (src, _nfc(src)))
+                manifest.pop(src, None)
+                manifest.pop(_nfc(src), None)
+                manifest.pop(_nfd(src), None)
+                print(f"[sync_index] Chunks removidos para arquivo deletado: {src}")
+
+        if not pdf_files:
+            conn.commit()
+            conn.close()
+            save_manifest(manifest)
             return []
 
-        conn = get_db()
+        # 2. Determina quais arquivos precisam ser (re-)indexados:
+        #    - mtime diferente do manifest (arquivo novo ou modificado)
+        #    - OU chunks ausentes do banco (manifest mentindo — ex: banco foi resetado)
+        needs_update = []
+        for p in pdf_files:
+            key = _nfc(p.name)
+            mtime_ok = (
+                manifest.get(key) == p.stat().st_mtime
+                or manifest.get(_nfd(key)) == p.stat().st_mtime
+            )
+            if not mtime_ok:
+                needs_update.append(p)
+                continue
+            # Mesmo que o manifest diga "ok", verifica se chunks existem no banco
+            row = conn.execute("SELECT COUNT(*) FROM chunks WHERE source = ? OR source = ?", (key, _nfd(key))).fetchone()
+            if row[0] == 0:
+                print(f"[sync_index] Arquivo no manifest mas sem chunks no banco — re-indexando: {key}")
+                needs_update.append(p)
+
         updated = []
         for pdf_path in needs_update:
-            key = _nfc(pdf_path.name)   # sempre NFC no banco e no manifest
+            key = _nfc(pdf_path.name)
             mtime = pdf_path.stat().st_mtime
-
-            # Remove chunks pela chave NFC e NFD (limpeza de dados antigos)
             conn.execute("DELETE FROM chunks WHERE source = ? OR source = ?", (key, _nfd(key)))
             chunks = extract_chunks(pdf_path)
             if chunks:
@@ -207,11 +222,10 @@ def sync_index() -> list:
                     "INSERT INTO chunks (source, page, text) VALUES (?, ?, ?)",
                     [(c["source"], str(c["page"]), c["text"]) for c in chunks],
                 )
-
-            # Remove entradas antigas NFD do manifest e salva NFC
             manifest.pop(_nfd(key), None)
             manifest[key] = mtime
             updated.append(key)
+            print(f"[sync_index] Indexado: {key} ({len(chunks)} chunks)")
 
         conn.commit()
         conn.close()

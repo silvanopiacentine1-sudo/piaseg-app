@@ -380,27 +380,17 @@ def _startup_disk_check():
         print(f"[disco] Falha ao enviar alerta: {e}")
 
 
-def _startup_check_index():
-    """Detecta PDFs sem chunks no banco e limpa manifest para forçar re-indexação pelo watcher."""
+def _startup_sync():
+    """Indexação imediata no startup — detecta PDFs novos/modificados/sem chunks e corrige."""
     try:
-        from insurers import save_manifest
-        conn = get_db()
-        indexed_sources = set(row[0] for row in conn.execute("SELECT DISTINCT source FROM chunks").fetchall())
-        conn.close()
-        missing = []
-        for folder in (PDF_FOLDER, PRODUCTS_FOLDER, ESPECIAIS_FOLDER, SERVICES_FOLDER):
-            if not folder.exists():
-                continue
-            for p in folder.glob("*.pdf"):
-                if p.name not in indexed_sources:
-                    missing.append(p.name)
-        if missing:
-            print(f"[startup] {len(missing)} PDFs não indexados — limpando manifest para forçar re-indexação: {missing[:5]}")
-            save_manifest({})
+        updated = sync_index()
+        if updated:
+            print(f"[startup] Indexação inicial: {len(updated)} arquivo(s) — {updated}")
         else:
-            print(f"[startup] ✓ {len(indexed_sources)} fontes indexadas no banco.")
+            print("[startup] ✓ Índice consistente.")
+        invalidate_collection_cache()
     except Exception as e:
-        print(f"[startup] Erro no check de índice: {e}")
+        print(f"[startup] Erro na indexação inicial: {e}")
 
 
 @app.on_event("startup")
@@ -411,7 +401,7 @@ def on_startup():
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
     _startup_disk_check()
-    _startup_check_index()
+    threading.Thread(target=_startup_sync, daemon=True).start()
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
     threading.Thread(target=_run_daily_backup, daemon=True).start()
 
