@@ -252,6 +252,41 @@ def update_faq_entry(faq_id: str, insurer: str, question: str, answer_text: str)
     return None
 
 
+def search_faq_general(question: str, n: int = 3) -> list:
+    """Busca FAQ sem filtro de seguradora — para responder antes de pedir ramo/insurer."""
+    data = load_faq()
+    question_words = set(re.findall(r'\w+', question.lower()))
+    scored = []
+    for entry in data:
+        faq_words = set(re.findall(r'\w+', entry["question"].lower()))
+        score = len(question_words & faq_words)
+        if score >= 2:
+            scored.append((score, entry))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [e for _, e in scored[:n]]
+
+
+def answer_from_faq_if_possible(question: str) -> Optional[dict]:
+    """Se o FAQ responde à pergunta sem precisar de seguradora, retorna a resposta. Senão retorna None."""
+    faqs = search_faq_general(question)
+    if not faqs:
+        return None
+    faq_block = "\n\n".join([f"P: {f['question']}\nR: {f['answer']}" for f in faqs])
+    context = f"### Perguntas Frequentes Piaseg\n\n{faq_block}"
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"{context}\n\nPergunta: {question}"}],
+        )
+        return {"answer": response.content[0].text, "sources": []}
+    except Exception as e:
+        print(f"[faq_general] Erro: {e}")
+        return None
+
+
 def search_faq(question: str, insurer_display: Optional[str] = None, n: int = 3) -> list:
     data = load_faq()
     if insurer_display:

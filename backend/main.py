@@ -36,6 +36,7 @@ from rag import (
     add_faq_entry,
     answer as rag_answer,
     answer_assistance,
+    answer_from_faq_if_possible,
     answer_portfolio,
     delete_faq_entry,
     detect_assistance_query,
@@ -379,6 +380,29 @@ def _startup_disk_check():
         print(f"[disco] Falha ao enviar alerta: {e}")
 
 
+def _startup_check_index():
+    """Detecta PDFs sem chunks no banco e limpa manifest para forçar re-indexação pelo watcher."""
+    try:
+        from insurers import save_manifest
+        conn = get_db()
+        indexed_sources = set(row[0] for row in conn.execute("SELECT DISTINCT source FROM chunks").fetchall())
+        conn.close()
+        missing = []
+        for folder in (PDF_FOLDER, PRODUCTS_FOLDER, ESPECIAIS_FOLDER, SERVICES_FOLDER):
+            if not folder.exists():
+                continue
+            for p in folder.glob("*.pdf"):
+                if p.name not in indexed_sources:
+                    missing.append(p.name)
+        if missing:
+            print(f"[startup] {len(missing)} PDFs não indexados — limpando manifest para forçar re-indexação: {missing[:5]}")
+            save_manifest({})
+        else:
+            print(f"[startup] ✓ {len(indexed_sources)} fontes indexadas no banco.")
+    except Exception as e:
+        print(f"[startup] Erro no check de índice: {e}")
+
+
 @app.on_event("startup")
 def on_startup():
     for folder in (PDF_FOLDER, ESPECIAIS_FOLDER, PRODUCTS_FOLDER, SERVICES_FOLDER):
@@ -387,6 +411,7 @@ def on_startup():
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
     _startup_disk_check()
+    _startup_check_index()
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
     threading.Thread(target=_run_daily_backup, daemon=True).start()
 
@@ -482,11 +507,17 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
         result["needs_insurer"] = False
         return result
 
-    # Perguntas digitadas: busca sempre nas Condições Gerais + FAQ
+    # 1. Tenta responder pelo FAQ geral (sem precisar de seguradora)
+    faq_result = answer_from_faq_if_possible(question)
+    if faq_result:
+        faq_result["needs_insurer"] = False
+        return faq_result
+
+    # 2. Detecta seguradora/categoria no texto da pergunta
     source_filter = detect_insurer(question)
     if not source_filter:
         return {
-            "answer": "Boa pergunta! 😊 Antes de responder, me diz: sobre qual seguradora é a sua dúvida?",
+            "answer": "Para responder com precisão, preciso saber mais. Sobre qual categoria é a sua dúvida?",
             "needs_insurer": True,
             "insurers": get_insurer_options(),
             "sources": [],

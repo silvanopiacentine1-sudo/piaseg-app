@@ -78,8 +78,8 @@ export default function ChatPage() {
   const [token, setToken] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
-  const [chatReady, setChatReady] = useState(false);
-  const [chatContext, setChatContext] = useState<{ category: string; insurer: string } | null>(null);
+  const [pendingCategory, setPendingCategory] = useState<string | null>(null);
+  const [allCategories, setAllCategories] = useState<CategoryItem[]>([]);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
   const [showQuiver, setShowQuiver] = useState(false);
@@ -121,15 +121,8 @@ export default function ChatPage() {
         ...(Array.isArray(products) ? products.filter((c: CategoryItem) => c.docs?.length > 0 || (c as any).documents?.length > 0).map((c: any) => ({ id: c.id, name: c.name, type: "product" as const, docs: c.documents ?? c.docs ?? [] })) : []),
         ...(Array.isArray(services) ? services.filter((c: CategoryItem) => c.docs?.length > 0 || (c as any).documents?.length > 0).map((c: any) => ({ id: c.id, name: c.name, type: "service" as const, docs: c.documents ?? c.docs ?? [] })) : []),
       ];
-      if (cats.length === 0) {
-        setMessages([welcome]);
-        setChatReady(true);
-      } else {
-        setMessages([
-          welcome,
-          { role: "assistant", content: "Sobre qual categoria você gostaria de conversar hoje?", isCategorySelect: true, categoryOptions: cats },
-        ]);
-      }
+      setAllCategories(cats);
+      setMessages([welcome]);
     });
   }, [router]);
 
@@ -153,7 +146,16 @@ export default function ChatPage() {
       const data = await res.json();
       if (data.needs_insurer) {
         setPendingQuestion(question);
-        setMessages((prev) => [...prev, { role: "assistant", content: data.answer, insurerOptions: data.insurers }]);
+        if (allCategories.length > 0) {
+          setMessages((prev) => [...prev, {
+            role: "assistant",
+            content: "Para responder com precisão, preciso saber mais. Sobre qual categoria é a sua dúvida?",
+            isCategorySelect: true,
+            categoryOptions: allCategories,
+          }]);
+        } else {
+          setMessages((prev) => [...prev, { role: "assistant", content: data.answer, insurerOptions: data.insurers }]);
+        }
       } else {
         setPendingQuestion(null);
         setMessages((prev) => [...prev, { role: "assistant", content: data.answer, sources: data.sources }]);
@@ -172,14 +174,15 @@ export default function ChatPage() {
     ]);
     const docsWithName = cat.docs.filter((d) => d.name);
     if (docsWithName.length === 0) {
-      setChatContext({ category: cat.name, insurer: "" });
-      setMessages((prev) => [...prev, { role: "assistant", content: `Ótimo! Pode me fazer sua pergunta sobre **${cat.name}**.` }]);
-      setChatReady(true);
+      const q = pendingQuestion!;
+      setPendingQuestion(null);
+      ask(`${q} (categoria: ${cat.name})`);
     } else if (docsWithName.length === 1) {
-      setChatContext({ category: cat.name, insurer: docsWithName[0].name });
-      setMessages((prev) => [...prev, { role: "assistant", content: `Ótimo! Pode me fazer sua pergunta sobre **${docsWithName[0].name}** — ${cat.name}.` }]);
-      setChatReady(true);
+      const q = pendingQuestion!;
+      setPendingQuestion(null);
+      ask(`${q} (categoria: ${cat.name}, seguradora: ${docsWithName[0].name})`);
     } else {
+      setPendingCategory(cat.name);
       setMessages((prev) => [...prev, {
         role: "assistant",
         content: "De qual seguradora você gostaria de saber mais?",
@@ -194,26 +197,23 @@ export default function ChatPage() {
     setMessages((prev) => [
       ...prev.map((m) => ({ ...m, isInsurerSelect: false })),
       { role: "user", content: insurerName },
-      { role: "assistant", content: `Perfeito! Pode me fazer sua pergunta sobre **${insurerName}**.` },
     ]);
-    setChatContext({ category: categoryName, insurer: insurerName });
-    setChatReady(true);
+    const q = pendingQuestion!;
+    const cat = pendingCategory || categoryName;
+    setPendingQuestion(null);
+    setPendingCategory(null);
+    ask(`${q} (categoria: ${cat}, seguradora: ${insurerName})`);
   }
 
   function send() {
     const text = input.trim();
-    if (!text || loading || !chatReady) return;
+    if (!text || loading || sendingEmail) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     if (pendingQuestion) {
       ask(`${pendingQuestion} (seguradora: ${text})`);
     } else {
-      const ctx = chatContext
-        ? chatContext.insurer
-          ? ` (categoria: ${chatContext.category}, seguradora: ${chatContext.insurer})`
-          : ` (categoria: ${chatContext.category})`
-        : "";
-      ask(`${text}${ctx}`);
+      ask(text);
     }
   }
 
@@ -666,8 +666,8 @@ export default function ChatPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder={!chatReady ? "Selecione a categoria e seguradora acima..." : pendingQuestion ? "Digite ou clique na seguradora..." : "Digite sua dúvida sobre seguros..."}
-          disabled={loading || sendingEmail || !chatReady}
+          placeholder={pendingQuestion ? "Digite ou clique na opção acima..." : "Digite sua dúvida sobre seguros..."}
+          disabled={loading || sendingEmail}
           className="flex-1 px-4 py-3 rounded-xl text-sm outline-none border"
           style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}
           onFocus={(e) => (e.target.style.borderColor = "#B8975C")}
@@ -675,7 +675,7 @@ export default function ChatPage() {
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim() || sendingEmail || !chatReady}
+          disabled={loading || !input.trim() || sendingEmail}
           className="w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           style={{ background: "#B8975C" }}
         >
