@@ -146,6 +146,10 @@ export default function ChatPage() {
         body: JSON.stringify({ question, query_type: queryType }),
       });
       if (res.status === 401) { router.replace("/"); return; }
+      if (!res.ok) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "Erro ao processar sua pergunta. Tente novamente em instantes. 🙏" }]);
+        return;
+      }
       const data = await res.json();
       if (data.needs_insurer) {
         setPendingQuestion(question);

@@ -84,7 +84,8 @@ def discover_insurers() -> dict:
 
 
 def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(SEARCH_DB_PATH)
+    conn = sqlite3.connect(SEARCH_DB_PATH, timeout=20)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS chunks
         USING fts5(source UNINDEXED, page UNINDEXED, text, tokenize='unicode61')
