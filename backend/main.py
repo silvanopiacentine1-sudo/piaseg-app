@@ -1054,6 +1054,13 @@ def diag(user: dict = Depends(require_admin)):
 def health():
     return {"status": "ok", "version": "backup-automatico"}
 
+@app.get("/admin/db-sources")
+def db_sources(user: dict = Depends(require_admin)):
+    conn = get_db()
+    rows = conn.execute("SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY n DESC LIMIT 50").fetchall()
+    conn.close()
+    return [{"source": r[0], "chunks": r[1]} for r in rows]
+
 @app.get("/test-html", response_class=Response)
 def test_html():
     return Response(content="<html><body><h1>HTML funcionando!</h1><p>Se você ver isso, HTML carrega normalmente.</p></body></html>", media_type="text/html")
