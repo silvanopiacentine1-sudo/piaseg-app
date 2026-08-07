@@ -172,10 +172,14 @@ def sync_index() -> list:
             except (PermissionError, OSError):
                 pass
 
+        if not pdf_files:
+            return []
+
         manifest = load_manifest()
         conn = get_db()
 
         # 1. Remove chunks de arquivos que não existem mais no disco
+        # (só faz isso quando há pelo menos um PDF em disco — evita limpar tudo se o disco não estiver montado)
         all_pdf_names_nfc = {_nfc(p.name) for p in pdf_files}
         stale = conn.execute("SELECT DISTINCT source FROM chunks").fetchall()
         for (src,) in stale:
@@ -185,12 +189,6 @@ def sync_index() -> list:
                 manifest.pop(_nfc(src), None)
                 manifest.pop(_nfd(src), None)
                 print(f"[sync_index] Chunks removidos para arquivo deletado: {src}")
-
-        if not pdf_files:
-            conn.commit()
-            conn.close()
-            save_manifest(manifest)
-            return []
 
         # 2. Determina quais arquivos precisam ser (re-)indexados:
         #    - mtime diferente do manifest (arquivo novo ou modificado)
