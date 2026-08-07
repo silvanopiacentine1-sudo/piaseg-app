@@ -143,6 +143,8 @@ export default function AdminPage() {
   // Backup tab state
   const [downloadingBackup, setDownloadingBackup] = useState(false);
   const [backupMsg, setBackupMsg] = useState("");
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexMsg, setReindexMsg] = useState("");
   interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
 
@@ -463,6 +465,16 @@ export default function AdminPage() {
       setBackupMsg("✓ Backup baixado com sucesso!");
     } catch { setBackupMsg("Erro ao conectar ao servidor."); }
     finally { setDownloadingBackup(false); }
+  }
+
+  async function handleReindex() {
+    setReindexing(true); setReindexMsg("");
+    try {
+      const res = await fetch(`${API}/admin/reindex`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setReindexMsg("Erro ao iniciar re-indexação."); return; }
+      setReindexMsg("✓ Re-indexação iniciada! Aguarde 30 segundos e teste o chat.");
+    } catch { setReindexMsg("Erro ao conectar ao servidor."); }
+    finally { setReindexing(false); }
   }
 
   async function loadEspeciais(t: string) {
@@ -1386,6 +1398,26 @@ export default function AdminPage() {
                 style={{ background: "#00213A" }}
               >
                 {downloadingBackup ? "Gerando backup..." : "⬇️ Baixar Backup Completo"}
+              </button>
+            </div>
+
+            {/* Re-indexação */}
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>🔄 Re-indexar documentos</h2>
+              <p className="text-xs text-gray-500 mb-3">Use quando o chat não encontrar informações em documentos que já foram cadastrados. Isso força o sistema a re-ler todos os PDFs.</p>
+              {reindexMsg && (
+                <div className="text-xs px-3 py-2 rounded-lg mb-3"
+                  style={{ background: reindexMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: reindexMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                  {reindexMsg}
+                </div>
+              )}
+              <button
+                onClick={handleReindex}
+                disabled={reindexing}
+                className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60"
+                style={{ background: "#B8975C" }}
+              >
+                {reindexing ? "Iniciando..." : "🔄 Re-indexar tudo agora"}
               </button>
             </div>
           </div>

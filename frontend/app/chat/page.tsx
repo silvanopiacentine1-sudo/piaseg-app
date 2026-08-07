@@ -108,11 +108,6 @@ export default function ChatPage() {
       .then((list) => setQuiverLinks(Array.isArray(list) ? list : []))
       .catch(() => {});
 
-    const welcome: Message = {
-      role: "assistant",
-      content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o **Piazinho**, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
-    };
-
     Promise.all([
       fetch(`${API}/products`, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json()).catch(() => []),
       fetch(`${API}/services`, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json()).catch(() => []),
@@ -122,7 +117,16 @@ export default function ChatPage() {
         ...(Array.isArray(services) ? services.filter((c: CategoryItem) => c.docs?.length > 0 || (c as any).documents?.length > 0).map((c: any) => ({ id: c.id, name: c.name, type: "service" as const, docs: c.documents ?? c.docs ?? [] })) : []),
       ];
       setAllCategories(cats);
-      setMessages([welcome]);
+      setMessages([
+        {
+          role: "assistant",
+          content: `🚀 Bem-vindo ao seu novo painel de sucesso! É com muita alegria que apresentamos o **Piazinho**, a nova ferramenta oficial da nossa rede de franquias, desenvolvida exclusivamente para apoiar o seu dia a dia e impulsionar os seus resultados. Este aplicativo foi feito para você. Estamos confiantes de que ele será um grande aliado na evolução do seu negócio. Conte sempre conosco.`,
+        },
+        {
+          role: "assistant",
+          content: "Pode fazer sua pergunta! 😊 Se precisar, te peço mais detalhes depois.",
+        },
+      ]);
     });
   }, [router]);
 

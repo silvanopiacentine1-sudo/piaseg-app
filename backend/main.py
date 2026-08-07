@@ -255,13 +255,11 @@ PDF_WATCH_INTERVAL_SECONDS = 120
 
 
 def _watch_pdf_folder():
-    # Aguarda 60s antes da primeira verificação para não sobrecarregar a memória no startup
-    time.sleep(60)
     while True:
         try:
             updated = sync_index()
             if updated:
-                print(f"[auto-index] Novos PDFs indexados: {updated}")
+                print(f"[auto-index] {len(updated)} PDFs indexados: {updated}")
                 invalidate_collection_cache()
         except Exception as e:
             print(f"[auto-index] Erro ao verificar pasta de PDFs: {e}")
@@ -380,19 +378,6 @@ def _startup_disk_check():
         print(f"[disco] Falha ao enviar alerta: {e}")
 
 
-def _startup_sync():
-    """Indexação imediata no startup — detecta PDFs novos/modificados/sem chunks e corrige."""
-    try:
-        updated = sync_index()
-        if updated:
-            print(f"[startup] Indexação inicial: {len(updated)} arquivo(s) — {updated}")
-        else:
-            print("[startup] ✓ Índice consistente.")
-        invalidate_collection_cache()
-    except Exception as e:
-        print(f"[startup] Erro na indexação inicial: {e}")
-
-
 @app.on_event("startup")
 def on_startup():
     for folder in (PDF_FOLDER, ESPECIAIS_FOLDER, PRODUCTS_FOLDER, SERVICES_FOLDER):
@@ -401,7 +386,18 @@ def on_startup():
         except Exception as e:
             print(f"[startup] Aviso: não foi possível criar pasta ({folder}): {e}")
     _startup_disk_check()
-    threading.Thread(target=_startup_sync, daemon=True).start()
+    # Se o banco está vazio, limpa o manifest para forçar re-indexação completa
+    try:
+        conn = get_db()
+        count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        conn.close()
+        if count == 0:
+            print("[startup] Banco vazio detectado — forçando re-indexação completa.")
+            from insurers import save_manifest
+            save_manifest({})
+    except Exception as e:
+        print(f"[startup] Erro ao checar banco: {e}")
+    # Watcher começa imediatamente (primeira indexação ocorre assim que o serviço sobe)
     threading.Thread(target=_watch_pdf_folder, daemon=True).start()
     threading.Thread(target=_run_daily_backup, daemon=True).start()
 
