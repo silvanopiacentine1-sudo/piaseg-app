@@ -59,13 +59,28 @@ def _nfd(text: str) -> str:
 
 
 def discover_insurers() -> dict:
-    if not PDF_FOLDER.exists():
-        return {}
-    try:
-        return {_nfc(p.name): derive_display_name(_nfc(p.name)) for p in sorted(PDF_FOLDER.glob("*.pdf"))}
-    except (PermissionError, OSError):
-        manifest = load_manifest()
-        return {_nfc(name): derive_display_name(_nfc(name)) for name in manifest.keys()}
+    result = {}
+    # Sistema legado: PDFs em /data/pdfs nomeados pela seguradora
+    if PDF_FOLDER.exists():
+        try:
+            for p in sorted(PDF_FOLDER.glob("*.pdf")):
+                result[_nfc(p.name)] = derive_display_name(_nfc(p.name))
+        except (PermissionError, OSError):
+            manifest = load_manifest()
+            result.update({_nfc(name): derive_display_name(_nfc(name)) for name in manifest.keys()})
+    # Novo sistema: products.json e services.json mapeiam pdoc_*.pdf → nome da seguradora
+    for json_path in (DATA_DIR / "products.json", DATA_DIR / "services.json"):
+        if json_path.exists():
+            try:
+                for cat in json.loads(json_path.read_text(encoding="utf-8")):
+                    for doc in cat.get("documents", []):
+                        fn = doc.get("filename", "")
+                        name = doc.get("name", "").strip()
+                        if fn and name:
+                            result[_nfc(fn)] = name
+            except Exception:
+                pass
+    return result
 
 
 def get_db() -> sqlite3.Connection:
