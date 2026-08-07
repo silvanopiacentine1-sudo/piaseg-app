@@ -1056,7 +1056,7 @@ def health():
 
 
 # Servir o frontend Next.js estático em /piazinho/
-_STATIC_PIAZINHO = Path(__file__).parent / "static_piazinho"
-if _STATIC_PIAZINHO.exists():
-    app.mount("/piazinho", StaticFiles(directory=str(_STATIC_PIAZINHO), html=True), name="piazinho")
+_STATIC_PIAZINHO = os.path.join(os.path.dirname(__file__), "static_piazinho")
+if os.path.isdir(_STATIC_PIAZINHO):
+    app.mount("/piazinho", StaticFiles(directory=_STATIC_PIAZINHO, html=True), name="piazinho")
 
