@@ -651,23 +651,12 @@ def index_status(user: dict = Depends(require_admin)):
 
 
 @app.post("/admin/reindex")
-def force_reindex(user: dict = Depends(require_admin)):
-    """Limpa o manifest e força re-indexação síncrona de todos os PDFs."""
+def force_reindex(background_tasks: BackgroundTasks, user: dict = Depends(require_admin)):
+    """Limpa o manifest e inicia re-indexação em background (evita timeout do Render)."""
     from insurers import save_manifest
     save_manifest({})
-    updated = sync_index()
-    invalidate_collection_cache()
-    conn = get_db()
-    total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-    sources = conn.execute("SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY n DESC").fetchall()
-    conn.close()
-    return {
-        "ok": True,
-        "indexed_files": len(updated),
-        "total_chunks": total_chunks,
-        "files": updated,
-        "sources": [{"source": r[0], "chunks": r[1]} for r in sources],
-    }
+    background_tasks.add_task(_index_and_invalidate)
+    return {"ok": True, "message": "iniciado"}
 
 
 @app.get("/faq")

@@ -471,20 +471,31 @@ export default function AdminPage() {
   }
 
   async function handleReindex() {
-    setReindexing(true); setReindexMsg("");
+    setReindexing(true); setReindexMsg("⏳ Iniciando indexação...");
     try {
       const res = await fetch(`${API}/admin/reindex`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      const d = await res.json();
-      if (!res.ok) { setReindexMsg("Erro ao re-indexar."); return; }
-      if (d.total_chunks === 0) {
-        setReindexMsg("⚠️ Re-indexação concluída, mas nenhum chunk foi indexado. Verifique se os PDFs estão cadastrados nas abas Condições Gerais ou Produtos.");
-      } else {
-        setReindexMsg(`✓ ${d.indexed_files} arquivo(s) indexado(s) — ${d.total_chunks} chunks no banco. O chat já está atualizado!`);
-      }
-      // Atualiza o status por documento
-      await loadIndexStatus(token);
-    } catch { setReindexMsg("Erro ao conectar ao servidor."); }
-    finally { setReindexing(false); }
+      if (!res.ok) { setReindexMsg("Erro ao iniciar re-indexação."); setReindexing(false); return; }
+      setReindexMsg("⏳ Indexação em andamento. Verificando status em 20 segundos...");
+      // Verifica o status automaticamente após 20 segundos
+      setTimeout(async () => {
+        try {
+          const r2 = await fetch(`${API}/admin/index-status`, { headers: { Authorization: `Bearer ${token}` } });
+          if (r2.ok) {
+            const d2 = await r2.json();
+            setIndexStatus(d2);
+            if (d2.total_chunks === 0) {
+              setReindexMsg("⚠️ Nenhum chunk indexado. Verifique se os PDFs estão cadastrados e se não são imagens digitalizadas.");
+            } else {
+              setReindexMsg(`✓ Indexação concluída — ${d2.total_chunks} chunks no banco. Veja o status abaixo.`);
+            }
+          }
+        } catch { setReindexMsg("⚠️ Não foi possível verificar o status. Use o botão 'Ver status' manualmente."); }
+        finally { setReindexing(false); }
+      }, 20000);
+    } catch {
+      setReindexMsg("Erro ao conectar ao servidor.");
+      setReindexing(false);
+    }
   }
 
   async function loadIndexStatus(t: string) {
