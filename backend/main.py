@@ -625,22 +625,19 @@ def index_status(user: dict = Depends(require_admin)):
 
     # Condições gerais de produtos e serviços (pdoc_*.pdf / sdoc_*.pdf)
     prod_docs = []
-    for cat in _load_products():
-        for doc in cat.get("documents", []):
-            fn = doc.get("filename", "")
-            c = _chunks_for(fn)
-            prod_docs.append({
-                "file": fn, "category": cat["name"],
-                "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
-            })
-    for cat in _load_services():
-        for doc in cat.get("documents", []):
-            fn = doc.get("filename", "")
-            c = _chunks_for(fn)
-            prod_docs.append({
-                "file": fn, "category": cat["name"],
-                "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
-            })
+    for source_list, folder in ((_load_products(), PRODUCTS_FOLDER), (_load_services(), SERVICES_FOLDER)):
+        for cat in source_list:
+            for doc in cat.get("documents", []):
+                fn = doc.get("filename", "")
+                c = _chunks_for(fn)
+                fpath = folder / fn if fn else None
+                exists = fpath.exists() if fpath else False
+                size_kb = round(fpath.stat().st_size / 1024) if exists else 0
+                prod_docs.append({
+                    "file": fn, "category": cat["name"],
+                    "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
+                    "file_exists": exists, "size_kb": size_kb,
+                })
 
     return {
         "condicoes_gerais": cg_pdfs,

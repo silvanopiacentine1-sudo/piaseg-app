@@ -123,25 +123,61 @@ def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 
         conn.close()
 
 
-def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) -> list:
+def _text_to_chunks(text: str, source: str, page_num: int, chunk_size: int = 800, overlap: int = 100) -> list:
     chunks = []
-    with open(pdf_path, "rb") as f:
-        reader = pypdf.PdfReader(f)
-        for page_num, page in enumerate(reader.pages, start=1):
-            try:
-                text = (page.extract_text() or "").strip()
-            except Exception:
-                continue
-            if not text:
-                continue
-            start = 0
-            while start < len(text):
-                end = min(start + chunk_size, len(text))
-                chunk = text[start:end].strip()
-                if len(chunk) > 50:
-                    chunks.append({"text": chunk, "source": _nfc(pdf_path.name), "page": page_num})
-                start += chunk_size - overlap
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunk = text[start:end].strip()
+        if len(chunk) > 50:
+            chunks.append({"text": chunk, "source": source, "page": page_num})
+        start += chunk_size - overlap
     return chunks
+
+
+def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) -> list:
+    source = _nfc(pdf_path.name)
+    chunks = []
+
+    # Tentativa 1: pypdf
+    try:
+        with open(pdf_path, "rb") as f:
+            reader = pypdf.PdfReader(f)
+            for page_num, page in enumerate(reader.pages, start=1):
+                try:
+                    text = (page.extract_text() or "").strip()
+                except Exception:
+                    continue
+                if text:
+                    chunks.extend(_text_to_chunks(text, source, page_num, chunk_size, overlap))
+    except Exception as e:
+        print(f"[extract] pypdf falhou em {pdf_path.name}: {e}")
+
+    if chunks:
+        print(f"[extract] pypdf: {len(chunks)} chunks de {pdf_path.name}")
+        return chunks
+
+    # Tentativa 2: pdfplumber (melhor com PDFs de codificação diferente)
+    try:
+        import pdfplumber
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                try:
+                    text = (page.extract_text() or "").strip()
+                except Exception:
+                    continue
+                if text:
+                    chunks.extend(_text_to_chunks(text, source, page_num, chunk_size, overlap))
+        if chunks:
+            print(f"[extract] pdfplumber: {len(chunks)} chunks de {pdf_path.name}")
+            return chunks
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[extract] pdfplumber falhou em {pdf_path.name}: {e}")
+
+    print(f"[extract] AVISO: nenhum texto extraído de {pdf_path.name} — PDF pode ser imagem digitalizada")
+    return []
 
 
 def load_manifest() -> dict:

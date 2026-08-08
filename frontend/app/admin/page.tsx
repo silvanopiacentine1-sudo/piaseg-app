@@ -147,7 +147,7 @@ export default function AdminPage() {
   const [reindexMsg, setReindexMsg] = useState("");
   interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
-  interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; }
+  interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; file_exists: boolean; size_kb: number; }
   const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; total_chunks: number } | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(false);
 
@@ -1474,6 +1474,7 @@ export default function AdminPage() {
                           <tr style={{ background: "#F5F2EC" }}>
                             <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Categoria</th>
                             <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Seguradora</th>
+                            <th className="text-right px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Tamanho</th>
                             <th className="text-right px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Chunks</th>
                             <th className="text-center px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Status</th>
                           </tr>
@@ -1483,21 +1484,33 @@ export default function AdminPage() {
                             <tr key={i} style={{ borderTop: "1px solid #EAE6DC" }}>
                               <td className="px-3 py-2" style={{ color: "#111" }}>{doc.category}</td>
                               <td className="px-3 py-2" style={{ color: "#111" }}>{doc.insurer}</td>
+                              <td className="px-3 py-2 text-right" style={{ color: "#888" }}>
+                                {doc.file_exists ? `${doc.size_kb} KB` : "—"}
+                              </td>
                               <td className="px-3 py-2 text-right" style={{ color: "#111" }}>{doc.chunks}</td>
                               <td className="px-3 py-2 text-center">
-                                {doc.indexed ? (
+                                {!doc.file_exists ? (
+                                  <span style={{ color: "#dc2626" }}>❌ Arquivo ausente</span>
+                                ) : doc.size_kb < 5 ? (
+                                  <span style={{ color: "#dc2626" }}>❌ Download inválido</span>
+                                ) : doc.indexed ? (
                                   <span style={{ color: "#16a34a" }}>✓ Indexado</span>
                                 ) : (
-                                  <span style={{ color: "#dc2626" }}>⚠️ Sem chunks</span>
+                                  <span style={{ color: "#ca8a04" }}>⚠️ PDF sem texto</span>
                                 )}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      {indexStatus.products.some(d => !d.indexed) && (
+                      {indexStatus.products.some(d => !d.indexed && d.file_exists && d.size_kb >= 5) && (
+                        <p className="mt-2 text-xs" style={{ color: "#ca8a04" }}>
+                          ⚠️ <strong>"PDF sem texto"</strong>: o arquivo existe mas não tem texto extraível — provavelmente é um PDF digitalizado (imagem). Substitua por uma versão digital do documento ou entre em contato com a seguradora para obter o PDF em formato texto.
+                        </p>
+                      )}
+                      {indexStatus.products.some(d => d.file_exists && d.size_kb < 5) && (
                         <p className="mt-2 text-xs" style={{ color: "#dc2626" }}>
-                          ⚠️ Documentos com "Sem chunks": o PDF não tem texto extraível (pode ser um PDF digitalizado/imagem). Tente re-cadastrar com um PDF diferente.
+                          ❌ <strong>"Download inválido"</strong>: o arquivo foi salvo mas está muito pequeno — o link provavelmente estava errado. Delete e re-cadastre com a URL correta do PDF.
                         </p>
                       )}
                     </div>
