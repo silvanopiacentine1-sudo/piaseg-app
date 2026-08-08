@@ -600,6 +600,7 @@ def remove_especial(filename: str, user: dict = Depends(require_admin)):
 @app.get("/admin/index-status")
 def index_status(user: dict = Depends(require_admin)):
     """Mostra quantos chunks cada PDF tem no banco, separado por pasta."""
+    from insurers import _nfc as _nfc_fn
     conn = get_db()
     rows = conn.execute(
         "SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY source"
@@ -607,21 +608,44 @@ def index_status(user: dict = Depends(require_admin)):
     conn.close()
     indexed = {r[0]: r[1] for r in rows}
 
+    def _chunks_for(filename: str) -> int:
+        return indexed.get(filename, 0) or indexed.get(_nfc_fn(filename), 0)
+
     cg_pdfs = []
     if PDF_FOLDER.exists():
         for p in sorted(PDF_FOLDER.glob("*.pdf")):
-            chunks = indexed.get(p.name, 0)
-            cg_pdfs.append({"file": p.name, "chunks": chunks, "indexed": chunks > 0})
+            c = _chunks_for(p.name)
+            cg_pdfs.append({"file": p.name, "chunks": c, "indexed": c > 0})
 
     esp_pdfs = []
     if ESPECIAIS_FOLDER.exists():
         for p in sorted(ESPECIAIS_FOLDER.glob("*.pdf")):
-            chunks = indexed.get(p.name, 0)
-            esp_pdfs.append({"file": p.name, "chunks": chunks, "indexed": chunks > 0})
+            c = _chunks_for(p.name)
+            esp_pdfs.append({"file": p.name, "chunks": c, "indexed": c > 0})
+
+    # Condições gerais de produtos e serviços (pdoc_*.pdf / sdoc_*.pdf)
+    prod_docs = []
+    for cat in _load_products():
+        for doc in cat.get("documents", []):
+            fn = doc.get("filename", "")
+            c = _chunks_for(fn)
+            prod_docs.append({
+                "file": fn, "category": cat["name"],
+                "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
+            })
+    for cat in _load_services():
+        for doc in cat.get("documents", []):
+            fn = doc.get("filename", "")
+            c = _chunks_for(fn)
+            prod_docs.append({
+                "file": fn, "category": cat["name"],
+                "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
+            })
 
     return {
         "condicoes_gerais": cg_pdfs,
         "especiais": esp_pdfs,
+        "products": prod_docs,
         "total_chunks": sum(indexed.values()),
     }
 

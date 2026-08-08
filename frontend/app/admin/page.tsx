@@ -147,6 +147,9 @@ export default function AdminPage() {
   const [reindexMsg, setReindexMsg] = useState("");
   interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
+  interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; }
+  const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; total_chunks: number } | null>(null);
+  const [loadingIndex, setLoadingIndex] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
@@ -476,10 +479,20 @@ export default function AdminPage() {
       if (d.total_chunks === 0) {
         setReindexMsg("⚠️ Re-indexação concluída, mas nenhum chunk foi indexado. Verifique se os PDFs estão cadastrados nas abas Condições Gerais ou Produtos.");
       } else {
-        setReindexMsg(`✓ ${d.indexed_files} arquivo(s) re-indexado(s) — ${d.total_chunks} chunks no banco. O chat já está atualizado!`);
+        setReindexMsg(`✓ ${d.indexed_files} arquivo(s) indexado(s) — ${d.total_chunks} chunks no banco. O chat já está atualizado!`);
       }
+      // Atualiza o status por documento
+      await loadIndexStatus(token);
     } catch { setReindexMsg("Erro ao conectar ao servidor."); }
     finally { setReindexing(false); }
+  }
+
+  async function loadIndexStatus(t: string) {
+    setLoadingIndex(true);
+    try {
+      const res = await fetch(`${API}/admin/index-status`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) { const d = await res.json(); setIndexStatus(d); }
+    } catch { /* silencioso */ } finally { setLoadingIndex(false); }
   }
 
   async function loadEspeciais(t: string) {
@@ -1416,14 +1429,70 @@ export default function AdminPage() {
                   {reindexMsg}
                 </div>
               )}
-              <button
-                onClick={handleReindex}
-                disabled={reindexing}
-                className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60"
-                style={{ background: "#B8975C" }}
-              >
-                {reindexing ? "⏳ Indexando... aguarde" : "🔄 Re-indexar tudo agora"}
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={handleReindex}
+                  disabled={reindexing}
+                  className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60"
+                  style={{ background: "#B8975C" }}
+                >
+                  {reindexing ? "⏳ Indexando... aguarde" : "🔄 Re-indexar tudo agora"}
+                </button>
+                <button
+                  onClick={() => loadIndexStatus(token)}
+                  disabled={loadingIndex}
+                  className="text-sm font-semibold px-5 py-2.5 rounded-xl disabled:opacity-60 border"
+                  style={{ borderColor: "#B8975C", color: "#B8975C", background: "white" }}
+                >
+                  {loadingIndex ? "Carregando..." : "🔍 Ver status dos documentos"}
+                </button>
+              </div>
+
+              {/* Painel de diagnóstico por documento */}
+              {indexStatus && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold mb-2" style={{ color: "#00213A" }}>
+                    Status por documento — Total: {indexStatus.total_chunks} chunks no banco
+                  </p>
+                  {indexStatus.products.length === 0 ? (
+                    <p className="text-xs text-gray-500">Nenhum produto cadastrado ainda.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr style={{ background: "#F5F2EC" }}>
+                            <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Categoria</th>
+                            <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Seguradora</th>
+                            <th className="text-right px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Chunks</th>
+                            <th className="text-center px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {indexStatus.products.map((doc, i) => (
+                            <tr key={i} style={{ borderTop: "1px solid #EAE6DC" }}>
+                              <td className="px-3 py-2" style={{ color: "#111" }}>{doc.category}</td>
+                              <td className="px-3 py-2" style={{ color: "#111" }}>{doc.insurer}</td>
+                              <td className="px-3 py-2 text-right" style={{ color: "#111" }}>{doc.chunks}</td>
+                              <td className="px-3 py-2 text-center">
+                                {doc.indexed ? (
+                                  <span style={{ color: "#16a34a" }}>✓ Indexado</span>
+                                ) : (
+                                  <span style={{ color: "#dc2626" }}>⚠️ Sem chunks</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {indexStatus.products.some(d => !d.indexed) && (
+                        <p className="mt-2 text-xs" style={{ color: "#dc2626" }}>
+                          ⚠️ Documentos com "Sem chunks": o PDF não tem texto extraível (pode ser um PDF digitalizado/imagem). Tente re-cadastrar com um PDF diferente.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

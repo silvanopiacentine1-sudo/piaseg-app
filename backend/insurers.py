@@ -98,24 +98,26 @@ def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 
     clean = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).strip()
     if not clean:
         return []
+    # Prefix matching: "cobertura*" encontra "cobertura", "coberturas", etc.
+    raw_terms = [t for t in clean.split() if t not in ('OR', 'AND', 'NOT') and len(t) >= 2]
+    fts_query = " OR ".join(f'{t}*' for t in raw_terms) if raw_terms else clean
     conn = get_db()
     try:
         if source_filter:
-            # Testa NFC e NFD: macOS salva nomes de arquivo em NFD,
-            # mas constantes Python são NFC — comparação direta falharia.
             sf_nfc = _nfc(source_filter)
             sf_nfd = unicodedata.normalize("NFD", source_filter)
             rows = conn.execute(
                 "SELECT source, page, text FROM chunks WHERE text MATCH ? AND (source = ? OR source = ?) ORDER BY rank LIMIT ?",
-                (clean, sf_nfc, sf_nfd, top_k)
+                (fts_query, sf_nfc, sf_nfd, top_k)
             ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT source, page, text FROM chunks WHERE text MATCH ? ORDER BY rank LIMIT ?",
-                (clean, top_k)
+                (fts_query, top_k)
             ).fetchall()
         return [{"source": r[0], "page": int(r[1]) if r[1] else 0, "text": r[2]} for r in rows]
-    except Exception:
+    except Exception as e:
+        print(f"[search_chunks] Erro FTS5 (query={fts_query!r}): {e}")
         return []
     finally:
         conn.close()

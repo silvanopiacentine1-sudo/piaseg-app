@@ -232,7 +232,15 @@ export default function ChatPage() {
 
   function send() {
     const text = input.trim();
-    if (!text || loading || sendingEmail || chatStep !== "question") return;
+    if (!text || loading || sendingEmail) return;
+    if (chatStep === "done") {
+      // Usuário quer iniciar nova conversa após encerrar
+      setInput("");
+      setMessages((prev) => [...prev, { role: "user", content: text }]);
+      startNewFlow();
+      return;
+    }
+    if (chatStep !== "question") return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     ask(text);
@@ -340,7 +348,7 @@ export default function ChatPage() {
   const inputPlaceholder =
     chatStep === "question" ? "Digite sua dúvida aqui..." :
     chatStep === "answered" ? "Use os botões acima para continuar..." :
-    chatStep === "done" ? "Conversa encerrada." :
+    chatStep === "done" ? "Digite para iniciar uma nova conversa..." :
     "Selecione uma opção acima...";
 
   return (
@@ -597,15 +605,15 @@ export default function ChatPage() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
           placeholder={inputPlaceholder}
-          disabled={loading || sendingEmail || chatStep !== "question"}
+          disabled={loading || sendingEmail || (chatStep !== "question" && chatStep !== "done")}
           className="flex-1 px-4 py-3 rounded-xl text-sm outline-none border"
-          style={{ borderColor: "#EAE6DC", background: chatStep === "question" ? "#F5F2EC" : "#f0ede8", color: "#111" }}
+          style={{ borderColor: "#EAE6DC", background: (chatStep === "question" || chatStep === "done") ? "#F5F2EC" : "#f0ede8", color: "#111" }}
           onFocus={(e) => (e.target.style.borderColor = "#B8975C")}
           onBlur={(e) => (e.target.style.borderColor = "#EAE6DC")}
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim() || sendingEmail || chatStep !== "question"}
+          disabled={loading || !input.trim() || sendingEmail || (chatStep !== "question" && chatStep !== "done")}
           className="w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           style={{ background: "#B8975C" }}
         >
