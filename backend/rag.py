@@ -14,13 +14,12 @@ FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 PORTFOLIO_FILENAME = "Portifólio de Produtos.pdf"
 
 SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual especialista em seguros da Piaseg Seguros Franchising.
-Responda as dúvidas dos franqueados com base APENAS no contexto fornecido (Perguntas Frequentes e Condições Gerais).
-Se houver uma resposta no bloco "Perguntas Frequentes Piaseg", priorize-a — ela é uma resposta oficial validada pela equipe da Piaseg.
-Se não houver, use as Condições Gerais da seguradora.
+Responda as dúvidas dos franqueados com base APENAS no contexto fornecido.
+PRIORIDADE DE FONTES: consulte primeiro as Condições Gerais da Seguradora. Só recorra às Perguntas Frequentes se a informação não estiver nas Condições Gerais.
 Seja amigável, acolhedor e use um tom leve e próximo, como um colega de trabalho prestativo — mas sem perder a objetividade e a precisão técnica.
 Cite a seguradora quando relevante e use linguagem simples, evitando jargões desnecessários.
 Pode usar emojis com moderação para deixar a conversa mais leve.
-Se a informação não estiver em nenhum dos dois contextos, informe de forma gentil que não encontrou nos documentos disponíveis e sugira contato com o suporte interno da Piaseg.
+Se a informação não estiver em nenhum dos contextos, informe de forma gentil que não encontrou nos documentos disponíveis e sugira contato com o suporte interno da Piaseg.
 Responda sempre em português brasileiro."""
 
 PORTFOLIO_SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual da Piaseg Seguros Franchising.
@@ -321,9 +320,9 @@ def answer(question: str, source_filter: Optional[str] = None, insurer_display: 
     ])
 
     context_parts = []
+    context_parts.append(f"### Condições Gerais da Seguradora (fonte primária)\n\n{cg_block}")
     if faq_block:
-        context_parts.append(f"### Perguntas Frequentes Piaseg (respostas oficiais)\n\n{faq_block}")
-    context_parts.append(f"### Condições Gerais da Seguradora\n\n{cg_block}")
+        context_parts.append(f"### Perguntas Frequentes Piaseg (fonte secundária)\n\n{faq_block}")
     context = "\n\n".join(context_parts)
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))

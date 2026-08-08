@@ -494,13 +494,7 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
         result["needs_insurer"] = False
         return result
 
-    # 1. Tenta responder pelo FAQ geral (sem precisar de seguradora)
-    faq_result = answer_from_faq_if_possible(question)
-    if faq_result:
-        faq_result["needs_insurer"] = False
-        return faq_result
-
-    # 2. Usa source_filter passado diretamente pelo frontend OU detecta pelo texto
+    # Usa source_filter passado diretamente pelo frontend OU detecta pelo texto
     source_filter = body.source_filter.strip() or detect_insurer(question)
 
     # 3. Sempre responde — com ou sem filtro de seguradora
