@@ -500,19 +500,14 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
         faq_result["needs_insurer"] = False
         return faq_result
 
-    # 2. Usa source_filter passado diretamente pelo frontend (mais confiável que parsing de texto)
+    # 2. Usa source_filter passado diretamente pelo frontend OU detecta pelo texto
     source_filter = body.source_filter.strip() or detect_insurer(question)
-    if not source_filter:
-        return {
-            "answer": "Para responder com precisão, preciso saber mais. Sobre qual categoria é a sua dúvida?",
-            "needs_insurer": True,
-            "insurers": get_insurer_options(),
-            "sources": [],
-        }
 
-    insurer_display = get_insurer_display_name(source_filter)
+    # 3. Sempre responde — com ou sem filtro de seguradora
+    # (rag_answer já faz fallback global se source_filter não tiver chunks)
+    insurer_display = get_insurer_display_name(source_filter) if source_filter else None
     try:
-        result = rag_answer(question, source_filter=source_filter, insurer_display=insurer_display)
+        result = rag_answer(question, source_filter=source_filter or None, insurer_display=insurer_display)
     except Exception as e:
         print(f"[chat] Erro no rag_answer: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {type(e).__name__}: {str(e)[:200]}")
@@ -638,12 +633,23 @@ def index_status(user: dict = Depends(require_admin)):
 
 
 @app.post("/admin/reindex")
-def force_reindex(background_tasks: BackgroundTasks, user: dict = Depends(require_admin)):
-    """Limpa o manifest e força re-indexação de todos os PDFs."""
+def force_reindex(user: dict = Depends(require_admin)):
+    """Limpa o manifest e força re-indexação síncrona de todos os PDFs."""
     from insurers import save_manifest
     save_manifest({})
-    background_tasks.add_task(_index_and_invalidate)
-    return {"ok": True, "message": "Re-indexação iniciada. Aguarde 30 segundos e tente novamente."}
+    updated = sync_index()
+    invalidate_collection_cache()
+    conn = get_db()
+    total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    sources = conn.execute("SELECT source, COUNT(*) as n FROM chunks GROUP BY source ORDER BY n DESC").fetchall()
+    conn.close()
+    return {
+        "ok": True,
+        "indexed_files": len(updated),
+        "total_chunks": total_chunks,
+        "files": updated,
+        "sources": [{"source": r[0], "chunks": r[1]} for r in sources],
+    }
 
 
 @app.get("/faq")

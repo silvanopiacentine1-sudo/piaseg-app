@@ -307,6 +307,11 @@ def answer(question: str, source_filter: Optional[str] = None, insurer_display: 
     terms = [w for w in text_clean.split() if w not in _GENERAL_STOPWORDS and len(w) >= 3]
     search_query = " OR ".join(terms) if terms else question
     chunks = search_chunks(search_query, source_filter=source_filter)
+    if not chunks and source_filter:
+        # Documento específico sem chunks (ainda não indexado) — busca em todos
+        print(f"[rag] source_filter={source_filter} sem chunks — fallback global")
+        chunks = search_chunks(search_query, source_filter=None)
+        insurer_display = None
     faqs = search_faq(question, insurer_display=insurer_display)
 
     faq_block = "\n\n".join([f"P: {f['question']}\nR: {f['answer']}" for f in faqs])

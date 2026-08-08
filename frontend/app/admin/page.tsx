@@ -471,8 +471,13 @@ export default function AdminPage() {
     setReindexing(true); setReindexMsg("");
     try {
       const res = await fetch(`${API}/admin/reindex`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) { setReindexMsg("Erro ao iniciar re-indexação."); return; }
-      setReindexMsg("✓ Re-indexação iniciada! Aguarde 30 segundos e teste o chat.");
+      const d = await res.json();
+      if (!res.ok) { setReindexMsg("Erro ao re-indexar."); return; }
+      if (d.total_chunks === 0) {
+        setReindexMsg("⚠️ Re-indexação concluída, mas nenhum chunk foi indexado. Verifique se os PDFs estão cadastrados nas abas Condições Gerais ou Produtos.");
+      } else {
+        setReindexMsg(`✓ ${d.indexed_files} arquivo(s) re-indexado(s) — ${d.total_chunks} chunks no banco. O chat já está atualizado!`);
+      }
     } catch { setReindexMsg("Erro ao conectar ao servidor."); }
     finally { setReindexing(false); }
   }
@@ -1404,10 +1409,10 @@ export default function AdminPage() {
             {/* Re-indexação */}
             <div className="bg-white rounded-2xl shadow-sm p-5">
               <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>🔄 Re-indexar documentos</h2>
-              <p className="text-xs text-gray-500 mb-3">Use quando o chat não encontrar informações em documentos que já foram cadastrados. Isso força o sistema a re-ler todos os PDFs.</p>
+              <p className="text-xs text-gray-500 mb-3">Use quando o chat não encontrar informações em documentos cadastrados. O processo aguarda a conclusão e mostra quantos arquivos foram indexados.</p>
               {reindexMsg && (
                 <div className="text-xs px-3 py-2 rounded-lg mb-3"
-                  style={{ background: reindexMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: reindexMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                  style={{ background: reindexMsg.startsWith("✓") ? "#f0fdf4" : reindexMsg.startsWith("⚠") ? "#fefce8" : "#fef2f2", color: reindexMsg.startsWith("✓") ? "#16a34a" : reindexMsg.startsWith("⚠") ? "#ca8a04" : "#dc2626" }}>
                   {reindexMsg}
                 </div>
               )}
@@ -1417,7 +1422,7 @@ export default function AdminPage() {
                 className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60"
                 style={{ background: "#B8975C" }}
               >
-                {reindexing ? "Iniciando..." : "🔄 Re-indexar tudo agora"}
+                {reindexing ? "⏳ Indexando... aguarde" : "🔄 Re-indexar tudo agora"}
               </button>
             </div>
           </div>
