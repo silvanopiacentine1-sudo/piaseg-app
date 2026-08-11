@@ -53,7 +53,7 @@ function renderMessage(text: string): ReactNode {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-type ChatStep = "category" | "insurer" | "question" | "answered" | "done";
+type ChatStep = "type" | "category" | "insurer" | "question" | "answered" | "done";
 
 interface CategoryDoc { id: string; name: string; filename: string; }
 interface CategoryItem { id: string; name: string; type: "product" | "service"; docs: CategoryDoc[]; }
@@ -62,6 +62,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   sources?: { source: string; page: number }[];
+  isTypeSelect?: boolean;
   isCategorySelect?: boolean;
   categoryOptions?: CategoryItem[];
   isInsurerSelect?: boolean;
@@ -79,7 +80,7 @@ export default function ChatPage() {
   const [userEmail, setUserEmail] = useState("");
   const [token, setToken] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [chatStep, setChatStep] = useState<ChatStep>("category");
+  const [chatStep, setChatStep] = useState<ChatStep>("type");
   const [selectedInsurer, setSelectedInsurer] = useState<{ name: string; filename: string } | null>(null);
   const [allCategories, setAllCategories] = useState<CategoryItem[]>([]);
   const [showPortfolio, setShowPortfolio] = useState(false);
@@ -128,11 +129,8 @@ export default function ChatPage() {
         },
         {
           role: "assistant",
-          content: cats.length > 0
-            ? "Você quer falar sobre qual produto? 😊"
-            : "Ainda não há produtos cadastrados. Configure as Condições Gerais no painel admin.",
-          isCategorySelect: cats.length > 0,
-          categoryOptions: cats,
+          content: "Você quer falar sobre o que agora? 😊",
+          isTypeSelect: true,
         },
       ]);
     });
@@ -142,21 +140,62 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  function startNewFlow(cats?: CategoryItem[]) {
-    const list = cats ?? allCategories;
+  function startNewFlow() {
     setSelectedInsurer(null);
-    setChatStep("category");
+    setChatStep("type");
     setMessages((prev) => [
       ...prev,
       {
         role: "assistant",
-        content: list.length > 0
-          ? "Você quer falar sobre qual produto? 😊"
-          : "Ainda não há produtos cadastrados. Configure as Condições Gerais no painel admin.",
-        isCategorySelect: list.length > 0,
-        categoryOptions: list,
+        content: "Você quer falar sobre o que agora? 😊",
+        isTypeSelect: true,
       },
     ]);
+  }
+
+  function selectType(type: "product" | "service") {
+    const label = type === "product" ? "Cond. Gerais" : "Serviços 24hs";
+    const filtered = allCategories.filter((c) => c.type === type);
+    setMessages((prev) => [
+      ...prev.map((m) => ({ ...m, isTypeSelect: false })),
+      { role: "user", content: label },
+    ]);
+
+    if (filtered.length === 0) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Não há documentos cadastrados nesta área ainda. Configure no painel admin. 🙏" },
+      ]);
+      startNewFlow();
+      return;
+    }
+
+    if (filtered.length === 1 && filtered[0].docs.length === 1) {
+      const doc = filtered[0].docs[0];
+      setSelectedInsurer({ name: doc.name, filename: doc.filename });
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Qual a sua dúvida sobre **${doc.name}**? 😊` },
+      ]);
+      setChatStep("question");
+      return;
+    }
+
+    if (filtered.length === 1) {
+      selectCategory(filtered[0]);
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: "Você quer falar sobre qual produto? 😊",
+        isCategorySelect: true,
+        categoryOptions: filtered,
+      },
+    ]);
+    setChatStep("category");
   }
 
   function selectCategory(cat: CategoryItem) {
@@ -349,7 +388,7 @@ export default function ChatPage() {
     chatStep === "question" ? "Digite sua dúvida aqui..." :
     chatStep === "answered" ? "Use os botões acima para continuar..." :
     chatStep === "done" ? "Digite para iniciar uma nova conversa..." :
-    "Selecione uma opção acima...";
+    "Selecione uma opção acima para continuar...";
 
   return (
     <div className="flex flex-col h-dvh" style={{ background: "#F5F2EC" }}>
@@ -417,6 +456,28 @@ export default function ChatPage() {
                       📄 {src.replace(".pdf", "")}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {/* Seleção de tipo (Cond. Gerais / Serviços 24hs) */}
+              {msg.isTypeSelect && (
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => selectType("product")}
+                    disabled={loading}
+                    className="text-xs px-4 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
+                    style={{ borderColor: "#B8975C", color: "#B8975C", background: "white" }}
+                  >
+                    📄 Cond. Gerais
+                  </button>
+                  <button
+                    onClick={() => selectType("service")}
+                    disabled={loading}
+                    className="text-xs px-4 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
+                    style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
+                  >
+                    🔧 Serviços 24hs
+                  </button>
                 </div>
               )}
 
