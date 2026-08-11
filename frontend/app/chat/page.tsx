@@ -155,13 +155,16 @@ export default function ChatPage() {
 
   function selectType(type: "product" | "service") {
     const label = type === "product" ? "Cond. Gerais" : "Serviços 24hs";
-    const filtered = allCategories.filter((c) => c.type === type);
+    const allDocs: CategoryDoc[] = allCategories
+      .filter((c) => c.type === type)
+      .flatMap((c) => c.docs);
+
     setMessages((prev) => [
       ...prev.map((m) => ({ ...m, isTypeSelect: false })),
       { role: "user", content: label },
     ]);
 
-    if (filtered.length === 0) {
+    if (allDocs.length === 0) {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Não há documentos cadastrados nesta área ainda. Configure no painel admin. 🙏" },
@@ -170,8 +173,8 @@ export default function ChatPage() {
       return;
     }
 
-    if (filtered.length === 1 && filtered[0].docs.length === 1) {
-      const doc = filtered[0].docs[0];
+    if (allDocs.length === 1) {
+      const doc = allDocs[0];
       setSelectedInsurer({ name: doc.name, filename: doc.filename });
       setMessages((prev) => [
         ...prev,
@@ -181,21 +184,11 @@ export default function ChatPage() {
       return;
     }
 
-    if (filtered.length === 1) {
-      selectCategory(filtered[0]);
-      return;
-    }
-
     setMessages((prev) => [
       ...prev,
-      {
-        role: "assistant",
-        content: "Você quer falar sobre qual produto? 😊",
-        isCategorySelect: true,
-        categoryOptions: filtered,
-      },
+      { role: "assistant", content: "Qual a seguradora?", isInsurerSelect: true, insurerDocs: allDocs },
     ]);
-    setChatStep("category");
+    setChatStep("insurer");
   }
 
   function selectCategory(cat: CategoryItem) {
