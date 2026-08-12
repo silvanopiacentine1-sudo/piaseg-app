@@ -89,6 +89,7 @@ export default function ChatPage() {
   const [assistanceContacts, setAssistanceContacts] = useState<{ id: string; name: string; phone: string; whatsapp: string }[]>([]);
   const [quiverLinks, setQuiverLinks] = useState<{ id: string; name: string; url: string }[]>([]);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [endConfirmFromSair, setEndConfirmFromSair] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -284,15 +285,27 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, { role: "user", content: "Sim" }]);
       startNewFlow();
     } else {
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: "Não" },
-        {
-          role: "assistant",
-          content: `Foi um prazer ajudar, **${userName}**! 😊 Sempre que precisar, o Piazinho estará aqui. Até a próxima! 🚀`,
-        },
-      ]);
-      setChatStep("done");
+      setMessages((prev) => [...prev, { role: "user", content: "Não" }]);
+      if (userEmail) {
+        setEndConfirmFromSair(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Deseja que nossa conversa seja enviada no seu e-mail? 📧",
+            isEndConfirm: true,
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Foi um prazer ajudar, **${userName}**! 😊 Sempre que precisar, o Piazinho estará aqui. Até a próxima! 🚀`,
+          },
+        ]);
+        setChatStep("done");
+      }
     }
   }
 
@@ -321,6 +334,7 @@ export default function ChatPage() {
 
   function handleSair() {
     if (messages.length > 1 && userEmail) {
+      setEndConfirmFromSair(true);
       setMessages((prev) => [...prev, {
         role: "assistant",
         content: "Deseja enviar essa conversa para seu e-mail? 📧",
@@ -364,17 +378,28 @@ export default function ChatPage() {
       ]);
     } finally {
       setSendingEmail(false);
-      setTimeout(logout, 2500);
+      if (endConfirmFromSair) {
+        setTimeout(logout, 2500);
+      } else {
+        setChatStep("done");
+      }
     }
   }
 
   function handleDeclineEmail() {
+    const farewell = endConfirmFromSair
+      ? `Tudo bem! Obrigado por usar o Piazinho. Até a próxima, ${userName}! 😊`
+      : `Foi um prazer ajudar, **${userName}**! 😊 Sempre que precisar, o Piazinho estará aqui. Até a próxima! 🚀`;
     setMessages((prev) => [
       ...prev.filter((m) => !m.isEndConfirm),
       { role: "user", content: "Não, obrigado" },
-      { role: "assistant", content: `Tudo bem! Obrigado por usar o Piazinho. Até a próxima, ${userName}! 😊` },
+      { role: "assistant", content: farewell },
     ]);
-    setTimeout(logout, 2000);
+    if (endConfirmFromSair) {
+      setTimeout(logout, 2000);
+    } else {
+      setChatStep("done");
+    }
   }
 
   const inputPlaceholder =
