@@ -156,16 +156,14 @@ export default function ChatPage() {
 
   function selectType(type: "product" | "service") {
     const label = type === "product" ? "Cond. Gerais" : "Serviços 24hs";
-    const allDocs: CategoryDoc[] = allCategories
-      .filter((c) => c.type === type)
-      .flatMap((c) => c.docs);
+    const filtered = allCategories.filter((c) => c.type === type);
 
     setMessages((prev) => [
       ...prev.map((m) => ({ ...m, isTypeSelect: false })),
       { role: "user", content: label },
     ]);
 
-    if (allDocs.length === 0) {
+    if (filtered.length === 0) {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Não há documentos cadastrados nesta área ainda. Configure no painel admin. 🙏" },
@@ -174,22 +172,23 @@ export default function ChatPage() {
       return;
     }
 
-    if (allDocs.length === 1) {
-      const doc = allDocs[0];
-      setSelectedInsurer({ name: doc.name, filename: doc.filename });
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Qual a sua dúvida sobre **${doc.name}**? 😊` },
-      ]);
-      setChatStep("question");
+    // Apenas 1 categoria: pula direto para seguradora
+    if (filtered.length === 1) {
+      selectCategory(filtered[0]);
       return;
     }
 
+    // Múltiplas categorias: pergunta o ramo
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", content: "Qual a seguradora?", isInsurerSelect: true, insurerDocs: allDocs },
+      {
+        role: "assistant",
+        content: "Qual o ramo? 😊",
+        isCategorySelect: true,
+        categoryOptions: filtered,
+      },
     ]);
-    setChatStep("insurer");
+    setChatStep("category");
   }
 
   function selectCategory(cat: CategoryItem) {
