@@ -55,6 +55,18 @@ ASSISTANCE_JSON_PATH = DATA_DIR / "assistance_contacts.json"
 QUIVER_JSON_PATH = DATA_DIR / "quiver_links.json"
 PRODUCTS_JSON_PATH = DATA_DIR / "products.json"
 SERVICES_JSON_PATH = DATA_DIR / "services.json"
+FAQ_CATEGORIES_JSON_PATH = DATA_DIR / "faq_categories.json"
+
+
+def _load_faq_categories() -> list:
+    if not FAQ_CATEGORIES_JSON_PATH.exists():
+        return []
+    return json.loads(FAQ_CATEGORIES_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_faq_categories(data: list) -> None:
+    FAQ_CATEGORIES_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FAQ_CATEGORIES_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_assistance() -> list:
@@ -434,6 +446,7 @@ class ChatRequest(BaseModel):
     question: str
     query_type: str = "general"  # "general" | "portfolio" | "assistance"
     source_filter: str = ""  # filename direto (pdoc_*.pdf) — quando o frontend já sabe qual doc usar
+    category: str = ""  # categoria FAQ selecionada pelo usuário no chat
 
 
 class FaqEntry(BaseModel):
@@ -500,8 +513,9 @@ def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     # 3. Sempre responde — com ou sem filtro de seguradora
     # (rag_answer já faz fallback global se source_filter não tiver chunks)
     insurer_display = get_insurer_display_name(source_filter) if source_filter else None
+    faq_category = body.category.strip() or None
     try:
-        result = rag_answer(question, source_filter=source_filter or None, insurer_display=insurer_display)
+        result = rag_answer(question, source_filter=source_filter or None, insurer_display=insurer_display, category=faq_category)
     except Exception as e:
         print(f"[chat] Erro no rag_answer: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {type(e).__name__}: {str(e)[:200]}")
@@ -679,6 +693,51 @@ def edit_faq_entry(faq_id: str, body: FaqEntry, user: dict = Depends(require_adm
 @app.delete("/faq/{faq_id}")
 def remove_faq_entry(faq_id: str, user: dict = Depends(require_admin)):
     delete_faq_entry(faq_id)
+    return {"ok": True}
+
+
+class FaqCategory(BaseModel):
+    name: str
+
+
+@app.get("/admin/faq-categories")
+def list_faq_categories(user: dict = Depends(require_admin)):
+    return _load_faq_categories()
+
+
+@app.post("/admin/faq-categories", status_code=201)
+def create_faq_category(body: FaqCategory, user: dict = Depends(require_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
+    data = _load_faq_categories()
+    cat_id = f"fcat_{uuid.uuid4().hex[:8]}"
+    cat = {"id": cat_id, "name": body.name.strip()}
+    data.append(cat)
+    _save_faq_categories(data)
+    return cat
+
+
+@app.put("/admin/faq-categories/{cat_id}")
+def rename_faq_category(cat_id: str, body: FaqCategory, user: dict = Depends(require_admin)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
+    data = _load_faq_categories()
+    for cat in data:
+        if cat["id"] == cat_id:
+            cat["name"] = body.name.strip()
+            _save_faq_categories(data)
+            return cat
+    raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+
+@app.delete("/admin/faq-categories/{cat_id}")
+def delete_faq_category(cat_id: str, user: dict = Depends(require_admin)):
+    data = _load_faq_categories()
+    cat = next((c for c in data if c["id"] == cat_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    data = [c for c in data if c["id"] != cat_id]
+    _save_faq_categories(data)
     return {"ok": True}
 
 

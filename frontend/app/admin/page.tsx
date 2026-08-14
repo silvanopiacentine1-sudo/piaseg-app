@@ -12,6 +12,11 @@ interface FaqItem {
   answer: string;
 }
 
+interface FaqCategory {
+  id: string;
+  name: string;
+}
+
 interface UserItem {
   username: string;
   name: string;
@@ -66,11 +71,21 @@ export default function AdminPage() {
   const [editContactPhone, setEditContactPhone] = useState("");
   const [editContactWhatsapp, setEditContactWhatsapp] = useState("");
 
+  // FAQ categories state
+  const [faqCategories, setFaqCategories] = useState<FaqCategory[]>([]);
+  const [newFaqCatName, setNewFaqCatName] = useState("");
+  const [savingFaqCat, setSavingFaqCat] = useState(false);
+  const [faqCatMsg, setFaqCatMsg] = useState("");
+
   // FAQ edit state
   const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
   const [editFaqInsurer, setEditFaqInsurer] = useState("");
   const [editFaqQuestion, setEditFaqQuestion] = useState("");
   const [editFaqAnswer, setEditFaqAnswer] = useState("");
+
+  // Refs for bold button in FAQ textareas
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+  const editFaqAnswerRef = useRef<HTMLTextAreaElement>(null);
 
   // Users edit state
   const [editingUsername, setEditingUsername] = useState<string | null>(null);
@@ -163,7 +178,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t), loadDiskStatus(t)]);
+    await Promise.all([loadFaq(t), loadFaqCategories(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t), loadDiskStatus(t)]);
     setLoading(false);
   }
 
@@ -538,6 +553,13 @@ export default function AdminPage() {
     }
   }
 
+  async function loadFaqCategories(t: string) {
+    try {
+      const res = await fetch(`${API}/admin/faq-categories`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setFaqCategories(await res.json());
+    } catch { /* silencioso */ }
+  }
+
   async function loadUsers(t: string) {
     try {
       const res = await fetch(`${API}/admin/users`, { headers: { Authorization: `Bearer ${t}` } });
@@ -722,6 +744,49 @@ export default function AdminPage() {
     } catch { /* silencioso */ }
   }
 
+  async function handleCreateFaqCat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newFaqCatName.trim()) return;
+    setSavingFaqCat(true);
+    setFaqCatMsg("");
+    try {
+      const res = await fetch(`${API}/admin/faq-categories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newFaqCatName.trim() }),
+      });
+      if (!res.ok) { setFaqCatMsg("Erro ao criar categoria."); return; }
+      const created = await res.json();
+      setFaqCategories((prev) => [...prev, created]);
+      setNewFaqCatName("");
+      setFaqCatMsg("✓ Categoria criada!");
+    } catch {
+      setFaqCatMsg("Erro ao conectar ao servidor.");
+    } finally {
+      setSavingFaqCat(false);
+    }
+  }
+
+  async function handleDeleteFaqCat(catId: string, catName: string) {
+    if (!confirm(`Remover categoria "${catName}"?`)) return;
+    try {
+      await fetch(`${API}/admin/faq-categories/${catId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      setFaqCategories((prev) => prev.filter((c) => c.id !== catId));
+    } catch { /* silencioso */ }
+  }
+
+  function applyBold(ref: React.RefObject<HTMLTextAreaElement | null>, value: string, setValue: (v: string) => void) {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    if (start === end) return;
+    const selected = value.slice(start, end);
+    const newVal = value.slice(0, start) + `**${selected}**` + value.slice(end);
+    setValue(newVal);
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, end + 2); }, 0);
+  }
+
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
     if (!newUsername.trim() || !newName.trim() || !newPassword) return;
@@ -826,9 +891,9 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex flex-wrap gap-1 mb-6 bg-white rounded-xl p-1.5 shadow-sm">
           <button style={tabStyle("produtos")} onClick={() => { setActiveTab("produtos"); setProductMsg(""); }}>📄 Cond. Gerais</button>
-          <button style={tabStyle("servicos")} onClick={() => { setActiveTab("servicos"); setServiceMsg(""); }}>🔧 Serviços 24hs</button>
+          <button style={tabStyle("servicos")} onClick={() => { setActiveTab("servicos"); setServiceMsg(""); }}>🔧 Assistências</button>
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
-          <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>🛟 Assistência</button>
+          <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>📞 Telefones</button>
           <button style={tabStyle("quiver")} onClick={() => { setActiveTab("quiver"); setQuiverMsg(""); }}>🎬 Quiver</button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>💬 FAQ</button>
           <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>👥 Usuários</button>
@@ -1251,14 +1316,41 @@ export default function AdminPage() {
         {/* ABA: FAQ */}
         {activeTab === "faq" && (
           <div>
+            {/* Gerenciamento de categorias */}
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Categorias do FAQ</h2>
+              <p className="text-xs text-gray-500 mb-3">Ex: Seguro Auto, Seguro Residencial... O sistema buscará respostas somente na categoria escolhida pelo usuário.</p>
+              <form onSubmit={handleCreateFaqCat} className="flex gap-2 mb-3">
+                <input value={newFaqCatName} onChange={(e) => setNewFaqCatName(e.target.value)} placeholder="Nome da categoria"
+                  className="flex-1 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                <button type="submit" disabled={savingFaqCat || !newFaqCatName.trim()}
+                  className="px-4 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 flex-shrink-0" style={{ background: "#B8975C" }}>
+                  {savingFaqCat ? "..." : "+ Criar"}
+                </button>
+              </form>
+              {faqCatMsg && <p className="text-xs mb-2 px-3 py-2 rounded-lg" style={{ background: faqCatMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: faqCatMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{faqCatMsg}</p>}
+              {faqCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {faqCategories.map((cat) => (
+                    <div key={cat.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold" style={{ background: "#EAE6DC", color: "#00213A" }}>
+                      {cat.name}
+                      <button onClick={() => handleDeleteFaqCat(cat.id, cat.name)} className="text-gray-400 hover:text-red-500 ml-1 font-bold">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Adicionar nova pergunta */}
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <h2 className="text-sm font-semibold mb-4" style={{ color: "#00213A" }}>Adicionar nova pergunta</h2>
               <form onSubmit={handleAdd} className="flex flex-col gap-3">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Seguradora</label>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Categoria</label>
                   <select value={insurer} onChange={(e) => setInsurer(e.target.value)}
                     className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
-                    {insurerOptions.map((i) => <option key={i} value={i}>{i}</option>)}
+                    <option value="Todas">Todas as categorias</option>
+                    {faqCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -1268,8 +1360,12 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Resposta oficial</label>
-                  <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Escreva a resposta oficial validada pela Piaseg..." rows={3}
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                  <div className="flex items-center gap-1 mt-1.5 mb-1">
+                    <button type="button" onClick={() => applyBold(answerRef, answer, setAnswer)}
+                      className="text-xs px-2 py-1 rounded border font-bold" style={{ borderColor: "#B8975C", color: "#B8975C" }} title="Negrito (selecione o texto)">B</button>
+                  </div>
+                  <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Escreva a resposta oficial validada pela Piaseg..." rows={3}
+                    className="w-full px-3 py-2.5 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
                 {error && <p className="text-red-600 text-xs bg-red-50 rounded-lg py-2 px-3">{error}</p>}
                 <button type="submit" disabled={saving || !question.trim() || !answer.trim()}
@@ -1288,10 +1384,17 @@ export default function AdminPage() {
                     {editingFaqId === item.id ? (
                       <div className="flex flex-col gap-2">
                         <select value={editFaqInsurer} onChange={(e) => setEditFaqInsurer(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
-                          {insurerOptions.map((i) => <option key={i} value={i}>{i}</option>)}
+                          <option value="Todas">Todas as categorias</option>
+                          {faqCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                         </select>
                         <input value={editFaqQuestion} onChange={(e) => setEditFaqQuestion(e.target.value)} placeholder="Pergunta" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
-                        <textarea value={editFaqAnswer} onChange={(e) => setEditFaqAnswer(e.target.value)} rows={3} placeholder="Resposta" className="px-3 py-2 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <button type="button" onClick={() => applyBold(editFaqAnswerRef, editFaqAnswer, setEditFaqAnswer)}
+                              className="text-xs px-2 py-1 rounded border font-bold" style={{ borderColor: "#B8975C", color: "#B8975C" }} title="Negrito">B</button>
+                          </div>
+                          <textarea ref={editFaqAnswerRef} value={editFaqAnswer} onChange={(e) => setEditFaqAnswer(e.target.value)} rows={3} placeholder="Resposta" className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        </div>
                         <div className="flex gap-2 justify-end">
                           <button onClick={() => setEditingFaqId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
                           <button onClick={() => handleSaveFaq(item.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>

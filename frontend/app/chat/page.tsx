@@ -82,6 +82,7 @@ export default function ChatPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [chatStep, setChatStep] = useState<ChatStep>("type");
   const [selectedInsurer, setSelectedInsurer] = useState<{ name: string; filename: string } | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [allCategories, setAllCategories] = useState<CategoryItem[]>([]);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
@@ -143,6 +144,7 @@ export default function ChatPage() {
 
   function startNewFlow() {
     setSelectedInsurer(null);
+    setSelectedCategory("");
     setChatStep("type");
     setMessages((prev) => [
       ...prev,
@@ -155,7 +157,7 @@ export default function ChatPage() {
   }
 
   function selectType(type: "product" | "service") {
-    const label = type === "product" ? "Cond. Gerais" : "Serviços 24hs";
+    const label = type === "product" ? "Cond. Gerais" : "Assistências";
     const filtered = allCategories.filter((c) => c.type === type);
 
     setMessages((prev) => [
@@ -192,6 +194,7 @@ export default function ChatPage() {
   }
 
   function selectCategory(cat: CategoryItem) {
+    setSelectedCategory(cat.name);
     setMessages((prev) => [
       ...prev.map((m) => ({ ...m, isCategorySelect: false })),
       { role: "user", content: cat.name },
@@ -241,7 +244,7 @@ export default function ChatPage() {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question, query_type: queryType, source_filter: sf }),
+        body: JSON.stringify({ question, query_type: queryType, source_filter: sf, category: selectedCategory }),
       });
       if (res.status === 401) { router.replace("/"); return; }
       if (!res.ok) {
@@ -476,7 +479,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {/* Seleção de tipo (Cond. Gerais / Serviços 24hs) */}
+              {/* Seleção de tipo (Cond. Gerais / Assistências) */}
               {msg.isTypeSelect && (
                 <div className="mt-3 flex gap-2 flex-wrap">
                   <button
@@ -493,7 +496,7 @@ export default function ChatPage() {
                     className="text-xs px-4 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
                     style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
                   >
-                    🔧 Serviços 24hs
+                    🔧 Assistências
                   </button>
                 </div>
               )}

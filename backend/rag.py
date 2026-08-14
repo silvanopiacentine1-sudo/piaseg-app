@@ -301,13 +301,13 @@ def search_faq(question: str, insurer_display: Optional[str] = None, n: int = 3)
     return [e for _, e in scored[:n]]
 
 
-def answer(question: str, source_filter: Optional[str] = None, insurer_display: Optional[str] = None) -> dict:
+def answer(question: str, source_filter: Optional[str] = None, insurer_display: Optional[str] = None, category: Optional[str] = None) -> dict:
     text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
     terms = [w for w in text_clean.split() if w not in _GENERAL_STOPWORDS and len(w) >= 3]
     search_query = " OR ".join(terms) if terms else question
     chunks = search_chunks(search_query, source_filter=source_filter)
     # Sem fallback global: busca exclusivamente no documento da seguradora selecionada
-    faqs = search_faq(question, insurer_display=insurer_display)
+    faqs = search_faq(question, insurer_display=category or insurer_display)
 
     faq_block = "\n\n".join([f"P: {f['question']}\nR: {f['answer']}" for f in faqs])
     cg_block = "\n\n---\n\n".join([
