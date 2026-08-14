@@ -635,7 +635,7 @@ export default function ChatPage() {
               <p className="text-sm text-center py-4" style={{ color: "#9a7d4a" }}>Nenhuma seguradora cadastrada ainda.</p>
             ) : (
               <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
-                {assistanceContacts.map((c) => (
+                {[...assistanceContacts].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })).map((c) => (
                   <button key={c.id} onClick={() => showAssistanceContact(c)} disabled={loading}
                     className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-xs font-medium transition-colors disabled:opacity-50 active:scale-95"
                     style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}>
