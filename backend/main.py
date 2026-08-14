@@ -453,6 +453,7 @@ class FaqEntry(BaseModel):
     insurer: str
     question: str
     answer: str
+    category: str = ""
 
 
 class UserCreate(BaseModel):
@@ -679,12 +680,12 @@ def list_faq_entries(user: dict = Depends(require_admin)):
 def create_faq_entry(body: FaqEntry, user: dict = Depends(require_admin)):
     if not body.question.strip() or not body.answer.strip():
         raise HTTPException(status_code=400, detail="Pergunta e resposta não podem ser vazias")
-    return add_faq_entry(body.insurer, body.question.strip(), body.answer.strip())
+    return add_faq_entry(body.insurer, body.question.strip(), body.answer.strip(), body.category)
 
 
 @app.put("/faq/{faq_id}")
 def edit_faq_entry(faq_id: str, body: FaqEntry, user: dict = Depends(require_admin)):
-    updated = update_faq_entry(faq_id, body.insurer, body.question.strip(), body.answer.strip())
+    updated = update_faq_entry(faq_id, body.insurer, body.question.strip(), body.answer.strip(), body.category)
     if not updated:
         raise HTTPException(status_code=404, detail="FAQ não encontrado")
     return updated

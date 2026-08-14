@@ -227,9 +227,9 @@ def save_faq(data: list) -> None:
     FAQ_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def add_faq_entry(insurer: str, question: str, answer_text: str) -> dict:
+def add_faq_entry(insurer: str, question: str, answer_text: str, category: str = "") -> dict:
     faq_id = f"faq_{uuid.uuid4().hex[:8]}"
-    entry = {"id": faq_id, "insurer": insurer, "question": question, "answer": answer_text}
+    entry = {"id": faq_id, "insurer": insurer, "category": category, "question": question, "answer": answer_text}
     data = load_faq()
     data.append(entry)
     save_faq(data)
@@ -241,11 +241,11 @@ def delete_faq_entry(faq_id: str) -> None:
     save_faq(data)
 
 
-def update_faq_entry(faq_id: str, insurer: str, question: str, answer_text: str) -> Optional[dict]:
+def update_faq_entry(faq_id: str, insurer: str, question: str, answer_text: str, category: str = "") -> Optional[dict]:
     data = load_faq()
     for i, e in enumerate(data):
         if e["id"] == faq_id:
-            data[i] = {**e, "insurer": insurer, "question": question, "answer": answer_text}
+            data[i] = {**e, "insurer": insurer, "category": category, "question": question, "answer": answer_text}
             save_faq(data)
             return data[i]
     return None
@@ -286,10 +286,12 @@ def answer_from_faq_if_possible(question: str) -> Optional[dict]:
         return None
 
 
-def search_faq(question: str, insurer_display: Optional[str] = None, n: int = 3) -> list:
+def search_faq(question: str, insurer_display: Optional[str] = None, category: Optional[str] = None, n: int = 3) -> list:
     data = load_faq()
     if insurer_display:
         data = [e for e in data if e["insurer"] in (insurer_display, "Todas")]
+    if category:
+        data = [e for e in data if e.get("category", "") in (category, "")]
     question_words = set(re.findall(r'\w+', question.lower()))
     scored = []
     for entry in data:
@@ -307,7 +309,7 @@ def answer(question: str, source_filter: Optional[str] = None, insurer_display: 
     search_query = " OR ".join(terms) if terms else question
     chunks = search_chunks(search_query, source_filter=source_filter)
     # Sem fallback global: busca exclusivamente no documento da seguradora selecionada
-    faqs = search_faq(question, insurer_display=category or insurer_display)
+    faqs = search_faq(question, insurer_display=insurer_display, category=category)
 
     faq_block = "\n\n".join([f"P: {f['question']}\nR: {f['answer']}" for f in faqs])
     cg_block = "\n\n---\n\n".join([

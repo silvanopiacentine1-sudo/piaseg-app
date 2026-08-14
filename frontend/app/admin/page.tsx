@@ -8,6 +8,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 interface FaqItem {
   id: string;
   insurer: string;
+  category?: string;
   question: string;
   answer: string;
 }
@@ -76,10 +77,12 @@ export default function AdminPage() {
   const [newFaqCatName, setNewFaqCatName] = useState("");
   const [savingFaqCat, setSavingFaqCat] = useState(false);
   const [faqCatMsg, setFaqCatMsg] = useState("");
+  const [faqCategory, setFaqCategory] = useState("");
 
   // FAQ edit state
   const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
   const [editFaqInsurer, setEditFaqInsurer] = useState("");
+  const [editFaqCategory, setEditFaqCategory] = useState("");
   const [editFaqQuestion, setEditFaqQuestion] = useState("");
   const [editFaqAnswer, setEditFaqAnswer] = useState("");
 
@@ -708,7 +711,7 @@ export default function AdminPage() {
       const res = await fetch(`${API}/faq`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ insurer, question, answer }),
+        body: JSON.stringify({ insurer, question, answer, category: faqCategory }),
       });
       if (!res.ok) { setError("Não foi possível salvar a pergunta."); return; }
       const created = await res.json();
@@ -727,7 +730,7 @@ export default function AdminPage() {
       const res = await fetch(`${API}/faq/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ insurer: editFaqInsurer, question: editFaqQuestion, answer: editFaqAnswer }),
+        body: JSON.stringify({ insurer: editFaqInsurer, question: editFaqQuestion, answer: editFaqAnswer, category: editFaqCategory }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1347,10 +1350,21 @@ export default function AdminPage() {
               <form onSubmit={handleAdd} className="flex flex-col gap-3">
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Categoria</label>
+                  <select value={faqCategory} onChange={(e) => setFaqCategory(e.target.value)}
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                    <option value="">Todas as categorias</option>
+                    {faqCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Seguradora</label>
                   <select value={insurer} onChange={(e) => setInsurer(e.target.value)}
                     className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
-                    <option value="Todas">Todas as categorias</option>
-                    {faqCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    <option value="Todas">Todas</option>
+                    {[...new Set([
+                      ...productCats.flatMap((c) => c.documents.map((d) => d.name)),
+                      ...serviceCats.flatMap((c) => c.documents.map((d) => d.name)),
+                    ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
                 <div>
@@ -1383,9 +1397,16 @@ export default function AdminPage() {
                   <div key={item.id} className="bg-white rounded-2xl shadow-sm p-4">
                     {editingFaqId === item.id ? (
                       <div className="flex flex-col gap-2">
-                        <select value={editFaqInsurer} onChange={(e) => setEditFaqInsurer(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
-                          <option value="Todas">Todas as categorias</option>
+                        <select value={editFaqCategory} onChange={(e) => setEditFaqCategory(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                          <option value="">Todas as categorias</option>
                           {faqCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
+                        <select value={editFaqInsurer} onChange={(e) => setEditFaqInsurer(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                          <option value="Todas">Todas</option>
+                          {[...new Set([
+                            ...productCats.flatMap((c) => c.documents.map((d) => d.name)),
+                            ...serviceCats.flatMap((c) => c.documents.map((d) => d.name)),
+                          ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
                         </select>
                         <input value={editFaqQuestion} onChange={(e) => setEditFaqQuestion(e.target.value)} placeholder="Pergunta" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                         <div>
@@ -1403,12 +1424,15 @@ export default function AdminPage() {
                     ) : (
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block mb-2" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>{item.insurer}</span>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {item.category && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block" style={{ background: "#dbeafe", color: "#1e40af" }}>{item.category}</span>}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>{item.insurer}</span>
+                          </div>
                           <p className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>{item.question}</p>
                           <p className="text-sm text-gray-600 leading-relaxed">{item.answer}</p>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => { setEditingFaqId(item.id); setEditFaqInsurer(item.insurer); setEditFaqQuestion(item.question); setEditFaqAnswer(item.answer); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          <button onClick={() => { setEditingFaqId(item.id); setEditFaqInsurer(item.insurer); setEditFaqCategory(item.category ?? ""); setEditFaqQuestion(item.question); setEditFaqAnswer(item.answer); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
                           <button onClick={() => handleDelete(item.id)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
                         </div>
                       </div>
