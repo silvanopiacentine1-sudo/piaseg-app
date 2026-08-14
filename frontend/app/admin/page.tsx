@@ -1213,7 +1213,7 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500">Nenhuma seguradora cadastrada ainda.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {contacts.map((c) => (
+                {[...contacts].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })).map((c) => (
                   <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3">
                     {editingContactId === c.id ? (
                       <div className="flex flex-col gap-2">
