@@ -157,7 +157,7 @@ export default function ChatPage() {
   }
 
   function selectType(type: "product" | "service") {
-    const label = type === "product" ? "Cond. Gerais" : "Telefones";
+    const label = type === "product" ? "Cond. Gerais" : "Assistências";
     const filtered = allCategories.filter((c) => c.type === type);
 
     setMessages((prev) => [
@@ -431,7 +431,7 @@ export default function ChatPage() {
             📋 Portifólio
           </button>
           <button onClick={() => setShowAssistance(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
-            🛟 Assistência
+            📞 Telefone
           </button>
           <button onClick={() => setShowQuiver(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
             🎬 Quiver
@@ -496,7 +496,7 @@ export default function ChatPage() {
                     className="text-xs px-4 py-2 rounded-full border font-semibold transition-colors disabled:opacity-50 active:scale-95"
                     style={{ borderColor: "#00213A", color: "#00213A", background: "white" }}
                   >
-                    📞 Telefones
+                    🔧 Assistências
                   </button>
                 </div>
               )}
