@@ -143,13 +143,34 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
     ext = pdf_path.suffix.lower()
     chunks = []
 
-    # --- Word (.docx) ---
+    # --- Word (.docx / .doc) ---
     if ext in (".docx", ".doc"):
+        # Método 1: zipfile puro (stdlib, sem dependências)
+        try:
+            import zipfile as _zip
+            import xml.etree.ElementTree as _ET
+            W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            lines = []
+            with _zip.ZipFile(str(pdf_path), "r") as z:
+                with z.open("word/document.xml") as f:
+                    root = _ET.parse(f).getroot()
+            for para in root.iter(f"{{{W}}}p"):
+                text = "".join(t.text or "" for t in para.iter(f"{{{W}}}t"))
+                if text.strip():
+                    lines.append(text.strip())
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] docx(zipfile): {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] docx(zipfile) falhou em {pdf_path.name}: {e}")
+
+        # Método 2: python-docx (fallback)
         try:
             from docx import Document as DocxDocument
             doc = DocxDocument(str(pdf_path))
             lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-            # tabelas
             for table in doc.tables:
                 for row in table.rows:
                     line = " | ".join(c.text.strip() for c in row.cells if c.text.strip())
@@ -166,6 +187,48 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
 
     # --- Excel (.xlsx / .xls) ---
     if ext in (".xlsx", ".xls"):
+        # Método 1: zipfile puro (lê xl/sharedStrings.xml + xl/worksheets/*.xml)
+        try:
+            import zipfile as _zip
+            import xml.etree.ElementTree as _ET
+            NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            lines = []
+            with _zip.ZipFile(str(pdf_path), "r") as z:
+                names = z.namelist()
+                # shared strings
+                shared = []
+                if "xl/sharedStrings.xml" in names:
+                    with z.open("xl/sharedStrings.xml") as f:
+                        root = _ET.parse(f).getroot()
+                    for si in root.iter(f"{{{NS}}}si"):
+                        text = "".join(t.text or "" for t in si.iter(f"{{{NS}}}t"))
+                        shared.append(text)
+                # worksheets
+                sheets = sorted(n for n in names if n.startswith("xl/worksheets/sheet") and n.endswith(".xml"))
+                for sheet_path in sheets:
+                    with z.open(sheet_path) as f:
+                        root = _ET.parse(f).getroot()
+                    for row in root.iter(f"{{{NS}}}row"):
+                        cells = []
+                        for c in row.iter(f"{{{NS}}}c"):
+                            t_attr = c.get("t", "")
+                            v = c.find(f"{{{NS}}}v")
+                            val = v.text if v is not None else ""
+                            if t_attr == "s" and val and shared:
+                                val = shared[int(val)] if int(val) < len(shared) else val
+                            if val and str(val).strip():
+                                cells.append(str(val).strip())
+                        if cells:
+                            lines.append(" | ".join(cells))
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] xlsx(zipfile): {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] xlsx(zipfile) falhou em {pdf_path.name}: {e}")
+
+        # Método 2: openpyxl (fallback)
         try:
             import openpyxl
             wb = openpyxl.load_workbook(str(pdf_path), data_only=True, read_only=True)
@@ -186,13 +249,36 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
             print(f"[extract] openpyxl falhou em {pdf_path.name}: {e}")
         return []
 
-    # --- PowerPoint (.pptx) ---
+    # --- PowerPoint (.pptx / .ppt) ---
     if ext in (".pptx", ".ppt"):
+        # Método 1: zipfile puro
+        try:
+            import zipfile as _zip
+            import xml.etree.ElementTree as _ET
+            A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+            lines = []
+            with _zip.ZipFile(str(pdf_path), "r") as z:
+                slides = sorted(n for n in z.namelist() if n.startswith("ppt/slides/slide") and n.endswith(".xml"))
+                for slide_path in slides:
+                    with z.open(slide_path) as f:
+                        root = _ET.parse(f).getroot()
+                    for t in root.iter(f"{{{A}}}t"):
+                        if t.text and t.text.strip():
+                            lines.append(t.text.strip())
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] pptx(zipfile): {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] pptx(zipfile) falhou em {pdf_path.name}: {e}")
+
+        # Método 2: python-pptx (fallback)
         try:
             from pptx import Presentation
             prs = Presentation(str(pdf_path))
             lines = []
-            for i, slide in enumerate(prs.slides, start=1):
+            for slide in prs.slides:
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text.strip():
                         lines.append(shape.text.strip())
