@@ -641,7 +641,10 @@ def index_status(user: dict = Depends(require_admin)):
 
     # Condições gerais de produtos e serviços (pdoc_*.pdf / sdoc_*.pdf)
     prod_docs = []
-    for source_list, folder in ((_load_products(), PRODUCTS_FOLDER), (_load_services(), SERVICES_FOLDER)):
+    for source_list, folder, doc_type in (
+        (_load_products(), PRODUCTS_FOLDER, "Condição Geral"),
+        (_load_services(), SERVICES_FOLDER, "Assistência"),
+    ):
         for cat in source_list:
             for doc in cat.get("documents", []):
                 fn = doc.get("filename", "")
@@ -653,6 +656,7 @@ def index_status(user: dict = Depends(require_admin)):
                     "file": fn, "category": cat["name"],
                     "insurer": doc.get("name", ""), "chunks": c, "indexed": c > 0,
                     "file_exists": exists, "size_kb": size_kb,
+                    "type": doc_type,
                 })
 
     return {

@@ -167,7 +167,7 @@ export default function AdminPage() {
   const [reindexMsg, setReindexMsg] = useState("");
   interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
-  interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; file_exists: boolean; size_kb: number; }
+  interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; file_exists: boolean; size_kb: number; type: string; }
   const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; total_chunks: number } | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(false);
 
@@ -1699,6 +1699,7 @@ export default function AdminPage() {
                       <table className="w-full text-xs border-collapse">
                         <thead>
                           <tr style={{ background: "#F5F2EC" }}>
+                            <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Aba</th>
                             <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Categoria</th>
                             <th className="text-left px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Seguradora</th>
                             <th className="text-right px-3 py-2 font-semibold" style={{ color: "#00213A" }}>Tamanho</th>
@@ -1709,6 +1710,20 @@ export default function AdminPage() {
                         <tbody>
                           {indexStatus.products.map((doc, i) => (
                             <tr key={i} style={{ borderTop: "1px solid #EAE6DC" }}>
+                              <td className="px-3 py-2">
+                                <span style={{
+                                  display: "inline-block",
+                                  padding: "1px 7px",
+                                  borderRadius: "99px",
+                                  fontSize: "10px",
+                                  fontWeight: 600,
+                                  background: doc.type === "Assistência" ? "#eff6ff" : "#f0fdf4",
+                                  color: doc.type === "Assistência" ? "#1d4ed8" : "#15803d",
+                                  border: `1px solid ${doc.type === "Assistência" ? "#bfdbfe" : "#bbf7d0"}`,
+                                }}>
+                                  {doc.type === "Assistência" ? "🔧 Assistência" : "📄 Cond. Geral"}
+                                </span>
+                              </td>
                               <td className="px-3 py-2" style={{ color: "#111" }}>{doc.category}</td>
                               <td className="px-3 py-2" style={{ color: "#111" }}>{doc.insurer}</td>
                               <td className="px-3 py-2 text-right" style={{ color: "#888" }}>
