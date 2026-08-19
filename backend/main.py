@@ -29,6 +29,7 @@ import uuid
 
 from insurers import (
     PDF_FOLDER, ESPECIAIS_FOLDER, DATA_DIR, PRODUCTS_FOLDER, SERVICES_FOLDER,
+    OFFICE_EXTENSIONS,
     derive_display_name, delete_pdf, delete_especial, delete_product_pdf, delete_service_pdf,
     sync_index, load_manifest, get_db,
 )
@@ -960,17 +961,20 @@ async def upload_product_document(cat_id: str, name: str, bg: BackgroundTasks, f
     cat = next((c for c in data if c["id"] == cat_id), None)
     if not cat:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
-    pdf_bytes = await file.read()
-    if pdf_bytes[:4] != b"%PDF":
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in OFFICE_EXTENSIONS:
+        raise HTTPException(status_code=422, detail=f"Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
+    file_bytes = await file.read()
+    if ext == ".pdf" and file_bytes[:4] != b"%PDF":
         raise HTTPException(status_code=422, detail="Arquivo não é um PDF válido")
     doc_id = f"pdoc_{uuid.uuid4().hex[:8]}"
-    filename = f"{doc_id}.pdf"
+    filename = f"{doc_id}{ext}"
     PRODUCTS_FOLDER.mkdir(parents=True, exist_ok=True)
-    (PRODUCTS_FOLDER / filename).write_bytes(pdf_bytes)
+    (PRODUCTS_FOLDER / filename).write_bytes(file_bytes)
     doc = {"id": doc_id, "name": name.strip(), "source_url": "", "filename": filename, "status": "ok"}
     cat["documents"].append(doc)
     _save_products(data)
-    bg.add_task(_index_file_background, PRODUCTS_FOLDER, filename, pdf_bytes)
+    bg.add_task(_index_file_background, PRODUCTS_FOLDER, filename, file_bytes)
     return doc
 
 
@@ -1051,17 +1055,20 @@ async def upload_service_document(cat_id: str, name: str, bg: BackgroundTasks, f
     cat = next((c for c in data if c["id"] == cat_id), None)
     if not cat:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
-    pdf_bytes = await file.read()
-    if pdf_bytes[:4] != b"%PDF":
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in OFFICE_EXTENSIONS:
+        raise HTTPException(status_code=422, detail=f"Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
+    file_bytes = await file.read()
+    if ext == ".pdf" and file_bytes[:4] != b"%PDF":
         raise HTTPException(status_code=422, detail="Arquivo não é um PDF válido")
     doc_id = f"sdoc_{uuid.uuid4().hex[:8]}"
-    filename = f"{doc_id}.pdf"
+    filename = f"{doc_id}{ext}"
     SERVICES_FOLDER.mkdir(parents=True, exist_ok=True)
-    (SERVICES_FOLDER / filename).write_bytes(pdf_bytes)
+    (SERVICES_FOLDER / filename).write_bytes(file_bytes)
     doc = {"id": doc_id, "name": name.strip(), "source_url": "", "filename": filename, "status": "ok"}
     cat["documents"].append(doc)
     _save_services(data)
-    bg.add_task(_index_file_background, SERVICES_FOLDER, filename, pdf_bytes)
+    bg.add_task(_index_file_background, SERVICES_FOLDER, filename, file_bytes)
     return doc
 
 

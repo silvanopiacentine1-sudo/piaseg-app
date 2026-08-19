@@ -131,6 +131,7 @@ export default function AdminPage() {
   const [addDocToService, setAddDocToService] = useState<string | null>(null);
   const [importingServiceDoc, setImportingServiceDoc] = useState(false);
   const [uploadingServiceDoc, setUploadingServiceDoc] = useState(false);
+  const [editingServiceDoc, setEditingServiceDoc] = useState<{ docId: string; catId: string } | null>(null);
 
   // Shared doc form state (only one active at a time)
   const [newDocName, setNewDocName] = useState("");
@@ -306,6 +307,43 @@ export default function AdminPage() {
       }
       setEditingProductDoc(null); setEditDocMsg("");
       await loadProducts(token);
+    } catch { setEditDocMsg("Erro ao conectar."); } finally { setSavingEditDoc(false); }
+  }
+
+  async function handleSaveServiceDoc(catId: string, docId: string, originalUrl: string) {
+    if (!editDocName.trim()) return;
+    setSavingEditDoc(true); setEditDocMsg("");
+    try {
+      if (editDocInputMode === "url") {
+        if (!editDocUrl.trim()) return;
+        if (editDocUrl.trim() === originalUrl) {
+          const res = await fetch(`${API}/admin/services/${catId}/documents/${docId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: editDocName.trim(), url: originalUrl }),
+          });
+          if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+        } else {
+          const res = await fetch(`${API}/admin/services/${catId}/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: editDocName.trim(), url: editDocUrl.trim() }),
+          });
+          if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+          await fetch(`${API}/admin/services/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+        }
+      } else {
+        if (!editDocFile) return;
+        const fd = new FormData();
+        fd.append("file", editDocFile);
+        const res = await fetch(`${API}/admin/services/${catId}/documents/upload?name=${encodeURIComponent(editDocName.trim())}`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd,
+        });
+        if (!res.ok) { const d = await res.json(); setEditDocMsg(`Erro: ${d.detail}`); return; }
+        await fetch(`${API}/admin/services/${catId}/documents/${docId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      }
+      setEditingServiceDoc(null); setEditDocMsg("");
+      await loadServices(token);
     } catch { setEditDocMsg("Erro ao conectar."); } finally { setSavingEditDoc(false); }
   }
 
@@ -958,13 +996,13 @@ export default function AdminPage() {
                                   <button type="button" onClick={() => setEditDocInputMode("upload")} className="flex-1 py-1.5 font-medium" style={{ background: editDocInputMode === "upload" ? "#00213A" : "#F5F2EC", color: editDocInputMode === "upload" ? "#fff" : "#666" }}>📤 Enviar arquivo</button>
                                 </div>
                                 {editDocInputMode === "url" ? (
-                                  <input value={editDocUrl} onChange={(e) => setEditDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                                  <input value={editDocUrl} onChange={(e) => setEditDocUrl(e.target.value)} placeholder="URL do documento (https://...)"
                                     className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
                                 ) : (
                                   <label className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#666" }}>
                                     <span>📄</span>
-                                    <span>{editDocFile ? editDocFile.name : "Clique para selecionar o PDF..."}</span>
-                                    <input type="file" accept=".pdf" className="hidden" onChange={(e) => setEditDocFile(e.target.files?.[0] ?? null)} />
+                                    <span>{editDocFile ? editDocFile.name : "Clique para selecionar..."}</span>
+                                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" onChange={(e) => setEditDocFile(e.target.files?.[0] ?? null)} />
                                   </label>
                                 )}
                                 {editDocMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: editDocMsg.startsWith("Erro") ? "#fef2f2" : "#f0fdf4", color: editDocMsg.startsWith("Erro") ? "#dc2626" : "#16a34a" }}>{editDocMsg}</p>}
@@ -1000,26 +1038,26 @@ export default function AdminPage() {
                               <button type="button" onClick={() => setDocInputMode("upload")} className="flex-1 py-1.5 font-medium transition-colors" style={{ background: docInputMode === "upload" ? "#00213A" : "#F5F2EC", color: docInputMode === "upload" ? "#fff" : "#666" }}>📤 Enviar arquivo</button>
                             </div>
                             {docInputMode === "url" ? (
-                              <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                              <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do documento (https://...)"
                                 className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
                             ) : (
                               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#666" }}>
                                 <span>📄</span>
-                                <span>{docUploadFile ? docUploadFile.name : "Clique para selecionar o PDF..."}</span>
-                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setDocUploadFile(e.target.files?.[0] ?? null)} />
+                                <span>{docUploadFile ? docUploadFile.name : "Clique para selecionar..."}</span>
+                                <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" onChange={(e) => setDocUploadFile(e.target.files?.[0] ?? null)} />
                               </label>
                             )}
                             {docImportMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: docImportMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: docImportMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{docImportMsg}</p>}
                             <div className="flex gap-2 justify-end">
                               <button type="button" onClick={() => { setAddDocToProduct(null); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); setDocUploadFile(null); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
                               <button type="submit" disabled={(importingProductDoc || uploadingProductDoc) || !newDocName.trim() || (docInputMode === "url" ? !newDocUrl.trim() : !docUploadFile)} className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
-                                {(importingProductDoc || uploadingProductDoc) ? "Processando..." : docInputMode === "url" ? "Importar PDF" : "Enviar PDF"}
+                                {(importingProductDoc || uploadingProductDoc) ? "Processando..." : docInputMode === "url" ? "Importar" : "Enviar arquivo"}
                               </button>
                             </div>
                           </form>
                         ) : (
                           <button onClick={() => { setAddDocToProduct(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); setDocInputMode("url"); setDocUploadFile(null); }} className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold mt-1 self-start" style={{ background: "#B8975C" }}>
-                            + Adicionar PDF
+                            + Adicionar documento
                           </button>
                         )}
                       </div>
@@ -1076,12 +1114,47 @@ export default function AdminPage() {
                     {expandedServiceCat === cat.id && (
                       <div className="border-t px-4 py-3 flex flex-col gap-2" style={{ borderColor: "#F5F2EC", background: "#FAFAF8" }}>
                         {cat.documents.map((doc) => (
-                          <div key={doc.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
-                              <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>
-                            </div>
-                            <button onClick={() => handleDeleteServiceDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500 flex-shrink-0">Remover</button>
+                          <div key={doc.id} className="border-b last:border-0" style={{ borderColor: "#EAE6DC" }}>
+                            {editingServiceDoc?.docId === doc.id ? (
+                              <div className="py-2 flex flex-col gap-2">
+                                <input value={editDocName} onChange={(e) => setEditDocName(e.target.value)} placeholder="Nome do documento"
+                                  className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                                <div className="flex rounded-lg overflow-hidden border text-xs" style={{ borderColor: "#EAE6DC" }}>
+                                  <button type="button" onClick={() => setEditDocInputMode("url")} className="flex-1 py-1.5 font-medium" style={{ background: editDocInputMode === "url" ? "#00213A" : "#F5F2EC", color: editDocInputMode === "url" ? "#fff" : "#666" }}>🔗 Por link (URL)</button>
+                                  <button type="button" onClick={() => setEditDocInputMode("upload")} className="flex-1 py-1.5 font-medium" style={{ background: editDocInputMode === "upload" ? "#00213A" : "#F5F2EC", color: editDocInputMode === "upload" ? "#fff" : "#666" }}>📤 Enviar arquivo</button>
+                                </div>
+                                {editDocInputMode === "url" ? (
+                                  <input value={editDocUrl} onChange={(e) => setEditDocUrl(e.target.value)} placeholder="URL do documento (https://...)"
+                                    className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
+                                ) : (
+                                  <label className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#666" }}>
+                                    <span>📄</span>
+                                    <span>{editDocFile ? editDocFile.name : "Clique para selecionar..."}</span>
+                                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" onChange={(e) => setEditDocFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                                {editDocMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: editDocMsg.startsWith("Erro") ? "#fef2f2" : "#f0fdf4", color: editDocMsg.startsWith("Erro") ? "#dc2626" : "#16a34a" }}>{editDocMsg}</p>}
+                                <div className="flex gap-2 justify-end">
+                                  <button type="button" onClick={() => { setEditingServiceDoc(null); setEditDocMsg(""); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                                  <button type="button" onClick={() => handleSaveServiceDoc(cat.id, doc.id, doc.source_url)}
+                                    disabled={savingEditDoc || !editDocName.trim() || (editDocInputMode === "url" ? !editDocUrl.trim() : !editDocFile)}
+                                    className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
+                                    {savingEditDoc ? "Salvando..." : "Salvar"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2 py-1.5">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{doc.name}</p>
+                                  {doc.source_url && <a href={doc.source_url} target="_blank" className="text-xs text-blue-400 truncate block hover:underline">{doc.source_url}</a>}
+                                </div>
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  <button onClick={() => { setEditingServiceDoc({ docId: doc.id, catId: cat.id }); setEditDocName(doc.name); setEditDocUrl(doc.source_url || ""); setEditDocInputMode(doc.source_url ? "url" : "upload"); setEditDocFile(null); setEditDocMsg(""); }} className="text-xs px-2.5 py-1 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                                  <button onClick={() => handleDeleteServiceDoc(cat.id, doc.id, doc.name)} className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-500">Remover</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                         {addDocToService === cat.id ? (
@@ -1093,26 +1166,26 @@ export default function AdminPage() {
                               <button type="button" onClick={() => setDocInputMode("upload")} className="flex-1 py-1.5 font-medium transition-colors" style={{ background: docInputMode === "upload" ? "#00213A" : "#F5F2EC", color: docInputMode === "upload" ? "#fff" : "#666" }}>📤 Enviar arquivo</button>
                             </div>
                             {docInputMode === "url" ? (
-                              <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do PDF (https://...)"
+                              <input value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)} placeholder="URL do documento (https://...)"
                                 className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#fff", color: "#111" }} />
                             ) : (
                               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#666" }}>
                                 <span>📄</span>
-                                <span>{docUploadFile ? docUploadFile.name : "Clique para selecionar o PDF..."}</span>
-                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setDocUploadFile(e.target.files?.[0] ?? null)} />
+                                <span>{docUploadFile ? docUploadFile.name : "Clique para selecionar..."}</span>
+                                <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" onChange={(e) => setDocUploadFile(e.target.files?.[0] ?? null)} />
                               </label>
                             )}
                             {docImportMsg && <p className="text-xs px-2 py-1 rounded" style={{ background: docImportMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: docImportMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>{docImportMsg}</p>}
                             <div className="flex gap-2 justify-end">
                               <button type="button" onClick={() => { setAddDocToService(null); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); setDocUploadFile(null); }} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
                               <button type="submit" disabled={(importingServiceDoc || uploadingServiceDoc) || !newDocName.trim() || (docInputMode === "url" ? !newDocUrl.trim() : !docUploadFile)} className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "#00213A" }}>
-                                {(importingServiceDoc || uploadingServiceDoc) ? "Processando..." : docInputMode === "url" ? "Importar PDF" : "Enviar PDF"}
+                                {(importingServiceDoc || uploadingServiceDoc) ? "Processando..." : docInputMode === "url" ? "Importar" : "Enviar arquivo"}
                               </button>
                             </div>
                           </form>
                         ) : (
                           <button onClick={() => { setAddDocToService(cat.id); setNewDocName(""); setNewDocUrl(""); setDocImportMsg(""); setDocInputMode("url"); setDocUploadFile(null); }} className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold mt-1 self-start" style={{ background: "#B8975C" }}>
-                            + Adicionar PDF
+                            + Adicionar documento
                           </button>
                         )}
                       </div>

@@ -61,7 +61,7 @@ export default function LoginPage() {
         {/* Formulário */}
         <div className="px-8 py-8">
           <p className="text-center text-sm mb-6 font-medium" style={{ color: "#00213A" }}>
-            Assistente de Seguros Auto
+            Seu Assistente Virtual 24hs
           </p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">

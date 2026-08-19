@@ -135,10 +135,77 @@ def _text_to_chunks(text: str, source: str, page_num: int, chunk_size: int = 800
     return chunks
 
 
+OFFICE_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt"}
+
+
 def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) -> list:
     source = _nfc(pdf_path.name)
+    ext = pdf_path.suffix.lower()
     chunks = []
 
+    # --- Word (.docx) ---
+    if ext in (".docx", ".doc"):
+        try:
+            from docx import Document as DocxDocument
+            doc = DocxDocument(str(pdf_path))
+            lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            # tabelas
+            for table in doc.tables:
+                for row in table.rows:
+                    line = " | ".join(c.text.strip() for c in row.cells if c.text.strip())
+                    if line:
+                        lines.append(line)
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] python-docx: {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] python-docx falhou em {pdf_path.name}: {e}")
+        return []
+
+    # --- Excel (.xlsx / .xls) ---
+    if ext in (".xlsx", ".xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(pdf_path), data_only=True, read_only=True)
+            lines = []
+            for sheet in wb.worksheets:
+                lines.append(f"[Planilha: {sheet.title}]")
+                for row in sheet.iter_rows(values_only=True):
+                    line = " | ".join(str(c) for c in row if c is not None and str(c).strip())
+                    if line:
+                        lines.append(line)
+            wb.close()
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] openpyxl: {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] openpyxl falhou em {pdf_path.name}: {e}")
+        return []
+
+    # --- PowerPoint (.pptx) ---
+    if ext in (".pptx", ".ppt"):
+        try:
+            from pptx import Presentation
+            prs = Presentation(str(pdf_path))
+            lines = []
+            for i, slide in enumerate(prs.slides, start=1):
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        lines.append(shape.text.strip())
+            text = "\n".join(lines)
+            if text:
+                chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
+                print(f"[extract] python-pptx: {len(chunks)} chunks de {pdf_path.name}")
+                return chunks
+        except Exception as e:
+            print(f"[extract] python-pptx falhou em {pdf_path.name}: {e}")
+        return []
+
+    # --- PDF (padrão) ---
     # Tentativa 1: pypdf
     try:
         with open(pdf_path, "rb") as f:
@@ -206,7 +273,8 @@ def sync_index() -> list:
             if not folder.exists():
                 continue
             try:
-                pdf_files += sorted(folder.glob("*.pdf"))
+                for ext in OFFICE_EXTENSIONS:
+                    pdf_files += sorted(folder.glob(f"*{ext}"))
             except (PermissionError, OSError):
                 pass
 
