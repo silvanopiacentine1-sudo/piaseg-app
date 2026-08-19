@@ -961,9 +961,9 @@ async def upload_product_document(cat_id: str, name: str, bg: BackgroundTasks, f
     cat = next((c for c in data if c["id"] == cat_id), None)
     if not cat:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
-    ext = Path(file.filename or "").suffix.lower()
+    ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in OFFICE_EXTENSIONS:
-        raise HTTPException(status_code=422, detail=f"Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
+        raise HTTPException(status_code=422, detail="Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
     file_bytes = await file.read()
     if ext == ".pdf" and file_bytes[:4] != b"%PDF":
         raise HTTPException(status_code=422, detail="Arquivo não é um PDF válido")
@@ -1055,9 +1055,9 @@ async def upload_service_document(cat_id: str, name: str, bg: BackgroundTasks, f
     cat = next((c for c in data if c["id"] == cat_id), None)
     if not cat:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
-    ext = Path(file.filename or "").suffix.lower()
+    ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in OFFICE_EXTENSIONS:
-        raise HTTPException(status_code=422, detail=f"Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
+        raise HTTPException(status_code=422, detail="Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
     file_bytes = await file.read()
     if ext == ".pdf" and file_bytes[:4] != b"%PDF":
         raise HTTPException(status_code=422, detail="Arquivo não é um PDF válido")
