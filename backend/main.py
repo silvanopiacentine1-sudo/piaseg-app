@@ -582,30 +582,41 @@ async def upload_especial(
     file: UploadFile = File(...),
     user: dict = Depends(require_admin),
 ):
-    ext = os.path.splitext(file.filename or "")[1].lower()
-    if ext not in OFFICE_EXTENSIONS:
+    safe_name = os.path.basename(file.filename or "")
+    ext = os.path.splitext(safe_name)[1].lower()
+    if not safe_name or ext not in OFFICE_EXTENSIONS:
         raise HTTPException(status_code=422, detail="Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
     ESPECIAIS_FOLDER.mkdir(parents=True, exist_ok=True)
-    pdf_path = ESPECIAIS_FOLDER / file.filename
+    dest = os.path.join(str(ESPECIAIS_FOLDER), safe_name)
     content = await file.read()
-    pdf_path.write_bytes(content)
+    with open(dest, "wb") as f:
+        f.write(content)
+    print(f"[especiais] arquivo salvo: {dest} ({len(content)} bytes)")
     background_tasks.add_task(_index_and_invalidate)
     return {
-        "filename": file.filename,
+        "filename": safe_name,
         "message": "Arquivo especial salvo. A indexação está sendo processada em background.",
     }
 
 
 @app.get("/admin/especiais")
 def list_especiais(user: dict = Depends(require_admin)):
-    if not ESPECIAIS_FOLDER.exists():
+    folder = str(ESPECIAIS_FOLDER)
+    if not os.path.isdir(folder):
+        print(f"[especiais] pasta não existe: {folder}")
         return []
     try:
-        return sorted(
-            p.name for p in ESPECIAIS_FOLDER.iterdir()
-            if p.is_file() and p.suffix.lower() in OFFICE_EXTENSIONS
-        )
-    except (PermissionError, OSError):
+        all_entries = os.listdir(folder)
+        print(f"[especiais] conteúdo da pasta: {all_entries}")
+        result = [
+            name for name in all_entries
+            if os.path.isfile(os.path.join(folder, name))
+            and os.path.splitext(name)[1].lower() in OFFICE_EXTENSIONS
+        ]
+        print(f"[especiais] arquivos filtrados: {result}")
+        return sorted(result)
+    except Exception as e:
+        print(f"[especiais] erro ao listar: {e}")
         return []
 
 
