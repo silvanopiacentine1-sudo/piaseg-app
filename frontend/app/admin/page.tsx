@@ -677,7 +677,8 @@ export default function AdminPage() {
   async function handleReplaceEspecial(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !replacingEspecial) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) { setUploadEspecialMsg("Apenas arquivos PDF são permitidos."); return; }
+    const allowedExt = [".pdf",".doc",".docx",".xls",".xlsx",".ppt",".pptx",".odt"];
+    if (!allowedExt.some(e => file.name.toLowerCase().endsWith(e))) { setUploadEspecialMsg("Formato não suportado. Use PDF, Word, Excel ou PowerPoint."); return; }
     setUploadingEspecial(true);
     setUploadEspecialMsg("");
     try {
@@ -689,7 +690,7 @@ export default function AdminPage() {
       if (file.name !== replacingEspecial) {
         await fetch(`${API}/admin/especial/${encodeURIComponent(replacingEspecial)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       }
-      setUploadEspecialMsg(`✓ "${replacingEspecial.replace(/\.pdf$/i, "")}" substituído com sucesso.`);
+      setUploadEspecialMsg(`✓ "${replacingEspecial.replace(/\.[^.]+$/, "")}" substituído com sucesso.`);
       await loadEspeciais(token);
     } catch {
       setUploadEspecialMsg("Erro ao substituir o arquivo.");
@@ -703,8 +704,9 @@ export default function AdminPage() {
   async function handleUploadEspecial(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadEspecialMsg("Apenas arquivos PDF são permitidos.");
+    const allowedExt = [".pdf",".doc",".docx",".xls",".xlsx",".ppt",".pptx",".odt"];
+    if (!allowedExt.some(e => file.name.toLowerCase().endsWith(e))) {
+      setUploadEspecialMsg("Formato não suportado. Use PDF, Word, Excel ou PowerPoint.");
       return;
     }
     setUploadingEspecial(true);
@@ -1210,8 +1212,8 @@ export default function AdminPage() {
                 <span className="text-3xl">📤</span>
                 <span className="text-sm font-medium" style={{ color: "#00213A" }}>{uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}</span>
                 <span className="text-xs text-gray-400">Portifólio, Assistências, etc.</span>
-                <input ref={especialFileInputRef} type="file" accept=".pdf" className="hidden" disabled={uploadingEspecial} onChange={handleUploadEspecial} />
-                <input ref={replaceEspecialInputRef} type="file" accept=".pdf" className="hidden" disabled={uploadingEspecial} onChange={handleReplaceEspecial} />
+                <input ref={especialFileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" disabled={uploadingEspecial} onChange={handleUploadEspecial} />
+                <input ref={replaceEspecialInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" disabled={uploadingEspecial} onChange={handleReplaceEspecial} />
               </label>
               {uploadEspecialMsg && (
                 <p className="text-xs mt-3 px-3 py-2 rounded-lg"

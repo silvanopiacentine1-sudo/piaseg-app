@@ -582,8 +582,9 @@ async def upload_especial(
     file: UploadFile = File(...),
     user: dict = Depends(require_admin),
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são permitidos")
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in OFFICE_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="Formato não suportado. Use PDF, Word, Excel ou PowerPoint.")
     ESPECIAIS_FOLDER.mkdir(parents=True, exist_ok=True)
     pdf_path = ESPECIAIS_FOLDER / file.filename
     content = await file.read()
@@ -600,7 +601,10 @@ def list_especiais(user: dict = Depends(require_admin)):
     if not ESPECIAIS_FOLDER.exists():
         return []
     try:
-        return sorted([p.name for p in ESPECIAIS_FOLDER.glob("*.pdf")])
+        files = []
+        for ext in OFFICE_EXTENSIONS:
+            files += ESPECIAIS_FOLDER.glob(f"*{ext}")
+        return sorted(p.name for p in files)
     except (PermissionError, OSError):
         return []
 
@@ -635,7 +639,10 @@ def index_status(user: dict = Depends(require_admin)):
 
     esp_pdfs = []
     if ESPECIAIS_FOLDER.exists():
-        for p in sorted(ESPECIAIS_FOLDER.glob("*.pdf")):
+        esp_all = []
+        for ext in OFFICE_EXTENSIONS:
+            esp_all += ESPECIAIS_FOLDER.glob(f"*{ext}")
+        for p in sorted(esp_all):
             c = _chunks_for(p.name)
             esp_pdfs.append({"file": p.name, "chunks": c, "indexed": c > 0})
 
