@@ -601,10 +601,10 @@ def list_especiais(user: dict = Depends(require_admin)):
     if not ESPECIAIS_FOLDER.exists():
         return []
     try:
-        files = []
-        for ext in OFFICE_EXTENSIONS:
-            files += ESPECIAIS_FOLDER.glob(f"*{ext}")
-        return sorted(p.name for p in files)
+        return sorted(
+            p.name for p in ESPECIAIS_FOLDER.iterdir()
+            if p.is_file() and p.suffix.lower() in OFFICE_EXTENSIONS
+        )
     except (PermissionError, OSError):
         return []
 
@@ -639,10 +639,10 @@ def index_status(user: dict = Depends(require_admin)):
 
     esp_pdfs = []
     if ESPECIAIS_FOLDER.exists():
-        esp_all = []
-        for ext in OFFICE_EXTENSIONS:
-            esp_all += ESPECIAIS_FOLDER.glob(f"*{ext}")
-        for p in sorted(esp_all):
+        for p in sorted(
+            f for f in ESPECIAIS_FOLDER.iterdir()
+            if f.is_file() and f.suffix.lower() in OFFICE_EXTENSIONS
+        ):
             c = _chunks_for(p.name)
             esp_pdfs.append({"file": p.name, "chunks": c, "indexed": c > 0})
 
