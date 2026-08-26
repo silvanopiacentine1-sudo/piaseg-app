@@ -292,6 +292,19 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
         return []
 
     # --- PDF (padrão) ---
+    # Verifica magic bytes antes de tentar ler — evita erros com arquivos corrompidos/gzip
+    try:
+        with open(pdf_path, "rb") as _hf:
+            _magic = _hf.read(4)
+        if _magic[:2] == b'\x1f\x8b':  # gzip
+            print(f"[extract] IGNORADO: {pdf_path.name} tem cabeçalho gzip, não é PDF válido")
+            return []
+        if _magic[:4] == b'PK\x03\x04':  # zip (docx/xlsx/pptx não devem chegar aqui, mas garante)
+            print(f"[extract] IGNORADO: {pdf_path.name} é arquivo ZIP com extensão .pdf")
+            return []
+    except Exception:
+        pass
+
     # Tentativa 1: pypdf
     try:
         with open(pdf_path, "rb") as f:
