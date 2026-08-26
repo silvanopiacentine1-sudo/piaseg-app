@@ -1210,8 +1210,8 @@ export default function AdminPage() {
                 style={{ borderColor: uploadingEspecial ? "#B8975C" : "#EAE6DC", background: "#F5F2EC" }}
               >
                 <span className="text-3xl">📤</span>
-                <span className="text-sm font-medium" style={{ color: "#00213A" }}>{uploadingEspecial ? "Enviando..." : "Clique para selecionar o PDF"}</span>
-                <span className="text-xs text-gray-400">Portifólio, Assistências, etc.</span>
+                <span className="text-sm font-medium" style={{ color: "#00213A" }}>{uploadingEspecial ? "Enviando..." : "Clique para selecionar o arquivo"}</span>
+                <span className="text-xs text-gray-400">PDF, Word, Excel, PowerPoint — Portifólio, Assistências, etc.</span>
                 <input ref={especialFileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" disabled={uploadingEspecial} onChange={handleUploadEspecial} />
                 <input ref={replaceEspecialInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt" className="hidden" disabled={uploadingEspecial} onChange={handleReplaceEspecial} />
               </label>
