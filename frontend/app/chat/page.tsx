@@ -85,6 +85,8 @@ export default function ChatPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [allCategories, setAllCategories] = useState<CategoryItem[]>([]);
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [portfolioItems, setPortfolioItems] = useState<{ num: number; label: string }[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
   const [showQuiver, setShowQuiver] = useState(false);
   const [assistanceContacts, setAssistanceContacts] = useState<{ id: string; name: string; phone: string; whatsapp: string }[]>([]);
@@ -311,6 +313,20 @@ export default function ChatPage() {
     }
   }
 
+  async function openPortfolio() {
+    setShowPortfolio(true);
+    if (portfolioItems.length > 0) return;
+    setPortfolioLoading(true);
+    try {
+      const res = await fetch(`${API}/portfolio/items`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setPortfolioItems(data.items || []);
+      }
+    } catch { /* silently */ }
+    finally { setPortfolioLoading(false); }
+  }
+
   function sendPortfolioQuery(produto: string) {
     if (loading) return;
     setShowPortfolio(false);
@@ -427,7 +443,7 @@ export default function ChatPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto">
-          <button onClick={() => setShowPortfolio(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
+          <button onClick={openPortfolio} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
             📋 Portifólio
           </button>
           <button onClick={() => setShowAssistance(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
@@ -600,22 +616,22 @@ export default function ChatPage() {
               </div>
               <button onClick={() => setShowPortfolio(false)} className="text-lg leading-none px-2 py-1 rounded-lg" style={{ color: "#9a7d4a" }}>✕</button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { emoji: "🚗", label: "Automóvel" }, { emoji: "🏠", label: "Residencial" }, { emoji: "🏢", label: "Empresarial" },
-                { emoji: "🚛", label: "Caminhão" }, { emoji: "🏍️", label: "Moto" }, { emoji: "✈️", label: "Viagem" },
-                { emoji: "🛡️", label: "Vida" }, { emoji: "🐾", label: "Animal" }, { emoji: "🚲", label: "Bike" },
-                { emoji: "🌊", label: "Náutico" }, { emoji: "😁", label: "Odontológico" }, { emoji: "💼", label: "D&O" },
-                { emoji: "🏭", label: "Engenharia" }, { emoji: "🚌", label: "RC Ônibus" }, { emoji: "🛡️", label: "Garantia" },
-              ].map(({ emoji, label }) => (
-                <button key={label} onClick={() => sendPortfolioQuery(label)} disabled={loading}
-                  className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-xs font-medium transition-colors disabled:opacity-50 active:scale-95"
-                  style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}>
-                  <span className="text-xl">{emoji}</span>
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
+            {portfolioLoading ? (
+              <p className="text-sm text-center py-6" style={{ color: "#9a7d4a" }}>Carregando ramos...</p>
+            ) : portfolioItems.length === 0 ? (
+              <p className="text-sm text-center py-4 text-gray-400">Nenhum item encontrado. Verifique se o arquivo foi enviado e indexado no admin.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto pr-1">
+                {portfolioItems.map(({ num, label }) => (
+                  <button key={num} onClick={() => sendPortfolioQuery(label)} disabled={loading}
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-medium text-left transition-colors disabled:opacity-50 active:scale-95"
+                    style={{ borderColor: "#EAE6DC", color: "#00213A", background: "#F5F2EC" }}>
+                    <span className="text-xs font-bold w-6 text-center flex-shrink-0" style={{ color: "#B8975C" }}>{num}</span>
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

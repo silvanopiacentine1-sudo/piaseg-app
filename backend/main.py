@@ -813,6 +813,38 @@ def delete_user_endpoint(username: str, current_user: dict = Depends(require_adm
     return {"ok": True}
 
 
+@app.get("/portfolio/items")
+def portfolio_items(user: dict = Depends(get_current_user)):
+    """Retorna os itens do portifólio extraídos dinamicamente do arquivo indexado."""
+    from rag import find_portfolio_source
+    from insurers import get_all_chunks
+    source = find_portfolio_source()
+    if not source:
+        return {"items": [], "source": None}
+    chunks = get_all_chunks(source)
+    if not chunks:
+        return {"items": [], "source": source}
+    full_text = "\n".join(c["text"] for c in chunks)
+    items = []
+    seen = set()
+    for line in full_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Padrão: número seguido de ponto, parêntese ou traço → "1. Automóvel", "2) Vida", "3 - Caminhão"
+        m = re.match(r'^(\d{1,3})\s*[.):\-–]\s*(.+)', line)
+        if m:
+            label = m.group(2).strip()
+            num = int(m.group(1))
+            key = label.lower()[:30]
+            if key not in seen:
+                seen.add(key)
+                items.append({"num": num, "label": label})
+    # Ordena pelo número
+    items.sort(key=lambda x: x["num"])
+    return {"items": items, "source": source}
+
+
 @app.get("/assistance")
 def list_assistance(user: dict = Depends(get_current_user)):
     return _load_assistance()
