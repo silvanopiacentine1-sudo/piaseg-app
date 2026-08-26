@@ -7,7 +7,7 @@ from typing import Optional
 
 import anthropic
 
-from insurers import DATA_DIR, discover_insurers, find_portfolio_source, find_assistance_source, search_chunks
+from insurers import DATA_DIR, discover_insurers, find_portfolio_source, find_assistance_source, search_chunks, get_all_chunks
 
 FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 
@@ -162,10 +162,18 @@ def answer_portfolio(question: str) -> dict:
     text_clean = re.sub(r'[^\w\s]', ' ', question.lower(), flags=re.UNICODE)
     terms = [w for w in text_clean.split() if w not in _PORTFOLIO_STOPWORDS and len(w) >= 2]
 
+    # Perguntas genéricas (listar tudo, ver todos os ramos) → retorna TODOS os chunks em ordem
+    _list_all = re.compile(r'todos|tudo|lista|liste|completo|inteiro|quais s[aã]o|mostre|ramo|ramos', re.IGNORECASE)
+    use_all = bool(_list_all.search(question)) or len(terms) <= 1
+
     chunks = []
-    if terms:
+    if use_all:
+        chunks = get_all_chunks(portfolio_source)
+    if not chunks and terms:
         fts_query = " OR ".join(terms)
-        chunks = search_chunks(fts_query, source_filter=portfolio_source, top_k=6)
+        chunks = search_chunks(fts_query, source_filter=portfolio_source, top_k=30)
+    if not chunks:
+        chunks = get_all_chunks(portfolio_source)
 
     if not chunks:
         return {

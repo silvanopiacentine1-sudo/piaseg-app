@@ -123,6 +123,24 @@ def search_chunks(query: str, source_filter: Optional[str] = None, top_k: int = 
         conn.close()
 
 
+def get_all_chunks(source: str) -> list:
+    """Retorna TODOS os chunks de uma fonte específica, em ordem de página."""
+    conn = get_db()
+    try:
+        sf_nfc = _nfc(source)
+        sf_nfd = unicodedata.normalize("NFD", source)
+        rows = conn.execute(
+            "SELECT source, page, text FROM chunks WHERE source = ? OR source = ? ORDER BY CAST(page AS INTEGER)",
+            (sf_nfc, sf_nfd)
+        ).fetchall()
+        return [{"source": r[0], "page": int(r[1]) if r[1] else 0, "text": r[2]} for r in rows]
+    except Exception as e:
+        print(f"[get_all_chunks] Erro: {e}")
+        return []
+    finally:
+        conn.close()
+
+
 def _text_to_chunks(text: str, source: str, page_num: int, chunk_size: int = 800, overlap: int = 100) -> list:
     chunks = []
     start = 0
@@ -154,10 +172,24 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
             with _zip.ZipFile(str(pdf_path), "r") as z:
                 with z.open("word/document.xml") as f:
                     root = _ET.parse(f).getroot()
+            # Parágrafos
             for para in root.iter(f"{{{W}}}p"):
+                # Ignora parágrafos dentro de tabelas (serão lidos abaixo)
+                if para.find(f"../../../{{{W}}}tbl") is not None:
+                    continue
                 text = "".join(t.text or "" for t in para.iter(f"{{{W}}}t"))
                 if text.strip():
                     lines.append(text.strip())
+            # Tabelas (cada linha da tabela vira uma linha de texto com | separando células)
+            for table in root.iter(f"{{{W}}}tbl"):
+                for row in table.iter(f"{{{W}}}tr"):
+                    cells = []
+                    for cell in row.iter(f"{{{W}}}tc"):
+                        cell_text = "".join(t.text or "" for t in cell.iter(f"{{{W}}}t"))
+                        if cell_text.strip():
+                            cells.append(cell_text.strip())
+                    if cells:
+                        lines.append(" | ".join(cells))
             text = "\n".join(lines)
             if text:
                 chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
