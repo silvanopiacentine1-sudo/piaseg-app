@@ -172,15 +172,22 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
             with _zip.ZipFile(str(pdf_path), "r") as z:
                 with z.open("word/document.xml") as f:
                     root = _ET.parse(f).getroot()
-            # Parágrafos
+
+            # Identifica todos os elementos <w:p> que estão DENTRO de tabelas
+            paras_in_tables = set()
+            for table in root.iter(f"{{{W}}}tbl"):
+                for para in table.iter(f"{{{W}}}p"):
+                    paras_in_tables.add(id(para))
+
+            # Parágrafos fora de tabelas (ordem do documento)
             for para in root.iter(f"{{{W}}}p"):
-                # Ignora parágrafos dentro de tabelas (serão lidos abaixo)
-                if para.find(f"../../../{{{W}}}tbl") is not None:
+                if id(para) in paras_in_tables:
                     continue
                 text = "".join(t.text or "" for t in para.iter(f"{{{W}}}t"))
                 if text.strip():
                     lines.append(text.strip())
-            # Tabelas (cada linha da tabela vira uma linha de texto com | separando células)
+
+            # Tabelas: cada linha vira "célula1 | célula2 | ..."
             for table in root.iter(f"{{{W}}}tbl"):
                 for row in table.iter(f"{{{W}}}tr"):
                     cells = []
@@ -190,7 +197,9 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
                             cells.append(cell_text.strip())
                     if cells:
                         lines.append(" | ".join(cells))
+
             text = "\n".join(lines)
+            print(f"[extract] docx(zipfile): {len(lines)} linhas, {len(text)} chars em {pdf_path.name}")
             if text:
                 chunks = _text_to_chunks(text, source, 1, chunk_size, overlap)
                 print(f"[extract] docx(zipfile): {len(chunks)} chunks de {pdf_path.name}")
@@ -527,15 +536,23 @@ def delete_pdf(filename: str) -> bool:
 
 def delete_especial(filename: str) -> bool:
     """Remove arquivo da pasta especiais e desvincula do índice.
-    Sempre limpa os chunks do banco, mesmo que o arquivo não exista em disco."""
+    Sempre limpa os chunks do banco e localiza o arquivo no disco por comparação
+    normalizada, evitando falhas por diferença NFC/NFD no sistema de arquivos."""
     _delete_chunks_and_manifest(filename)
-    for name in (_nfc(filename), _nfd(filename)):
-        pdf_path = ESPECIAIS_FOLDER / name
-        if pdf_path.exists():
-            try:
-                pdf_path.unlink()
-            except OSError as e:
-                print(f"[delete_especial] erro ao remover arquivo {pdf_path}: {e}")
+    if ESPECIAIS_FOLDER.exists():
+        target = _nfc(filename).lower()
+        for entry in ESPECIAIS_FOLDER.iterdir():
+            if not entry.is_file():
+                continue
+            if _nfc(entry.name).lower() == target:
+                try:
+                    entry.unlink(missing_ok=True)
+                    print(f"[delete_especial] removido do disco: {entry.name}")
+                except Exception as e:
+                    print(f"[delete_especial] erro ao remover {entry.name}: {e}")
+                break
+        else:
+            print(f"[delete_especial] arquivo não encontrado em disco: {filename}")
     return True
 
 
