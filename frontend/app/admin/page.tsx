@@ -1255,7 +1255,7 @@ export default function AdminPage() {
                 {especiais.map((pdf) => (
                   <div key={pdf} className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-lg">{pdf.toLowerCase().includes("ortif") ? "📋" : pdf.toLowerCase().includes("ssist") ? "🛟" : "📄"}</span>
+                      <span className="text-lg">{(pdf.toLowerCase().includes("ortif") || pdf.toLowerCase().includes("ortf")) ? "📋" : pdf.toLowerCase().includes("ssist") ? "🛟" : "📄"}</span>
                       <div>
                         <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{pdf.replace(/\.pdf$/i, "")}</p>
                         <p className="text-xs text-gray-400">{pdf}</p>

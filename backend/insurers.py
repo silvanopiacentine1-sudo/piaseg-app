@@ -480,12 +480,13 @@ def sync_index() -> list:
 
 
 def find_portfolio_source() -> Optional[str]:
-    """Retorna o source exato do portifólio no banco, buscando por 'ortif' no nome."""
+    """Retorna o source exato do portifólio no banco.
+    Aceita 'Portifólio' (com i) e 'Portfólio' (sem i)."""
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT DISTINCT source FROM chunks WHERE source LIKE ? LIMIT 1",
-            ("%ortif%",)
+            "SELECT DISTINCT source FROM chunks WHERE source LIKE ? OR source LIKE ? LIMIT 1",
+            ("%ortif%", "%ortf%")
         ).fetchone()
         return row[0] if row else None
     except Exception:

@@ -11,7 +11,7 @@ from insurers import DATA_DIR, discover_insurers, find_portfolio_source, find_as
 
 FAQ_JSON_PATH = DATA_DIR / "faq_data.json"
 
-PORTFOLIO_FILENAME = "Portifólio de Produtos.pdf"
+PORTFOLIO_FILENAME = "Portfólio de Produtos.docx"
 
 SYSTEM_PROMPT = """Você é o Piazinho, assistente virtual especialista em seguros da Piaseg Seguros Franchising.
 Responda as dúvidas dos franqueados com base APENAS no contexto fornecido.
@@ -100,7 +100,7 @@ _PORTFOLIO_PATTERNS = [
     r'aceita.*seguro',
     r'quem faz seguro',
     r'quais faz',
-    r'portif[oó]lio',
+    r'port[i]?f[oó]lio',
     r'quem trabalha com',
     r'quais trabalham',
     r'que seguradoras',
