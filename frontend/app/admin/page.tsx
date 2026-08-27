@@ -172,6 +172,12 @@ export default function AdminPage() {
   const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; especiais: EspecialDoc[]; total_chunks: number } | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(false);
 
+  // Diagnóstico do portifólio
+  interface PortfolioPreview { source: string | null; total_chunks: number; lines: string[]; }
+  const [portfolioPreview, setPortfolioPreview] = useState<PortfolioPreview | null>(null);
+  const [loadingPortfolioPreview, setLoadingPortfolioPreview] = useState(false);
+  const [showPortfolioPreview, setShowPortfolioPreview] = useState(false);
+
   useEffect(() => {
     const t = localStorage.getItem("piaseg_token");
     const isAdmin = localStorage.getItem("piaseg_is_admin") === "1";
@@ -578,6 +584,15 @@ export default function AdminPage() {
     } catch { /* silencioso */ } finally { setLoadingIndex(false); }
   }
 
+  async function handlePortfolioPreview() {
+    setLoadingPortfolioPreview(true);
+    setShowPortfolioPreview(true);
+    try {
+      const res = await fetch(`${API}/admin/portfolio-preview`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setPortfolioPreview(await res.json()); }
+    } catch { /* silencioso */ } finally { setLoadingPortfolioPreview(false); }
+  }
+
   async function loadEspeciais(t: string) {
     try {
       const res = await fetch(`${API}/admin/especiais`, { headers: { Authorization: `Bearer ${t}` } });
@@ -733,14 +748,23 @@ export default function AdminPage() {
   }
 
   async function handleDeleteEspecial(filename: string) {
-    if (!confirm(`Remover "${filename}"?`)) return;
+    if (!confirm(`Remover "${filename}"? Os chunks do banco também serão apagados.`)) return;
+    setUploadEspecialMsg("");
     try {
-      await fetch(`${API}/admin/especial/${encodeURIComponent(filename)}`, {
+      const res = await fetch(`${API}/admin/especial/${encodeURIComponent(filename)}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setUploadEspecialMsg(`Erro ao remover: ${d.detail ?? res.status}`);
+        return;
+      }
+      setUploadEspecialMsg(`✓ "${filename}" removido com sucesso.`);
       await loadEspeciais(token);
-    } catch { /* silencioso */ }
+    } catch {
+      setUploadEspecialMsg("Erro de conexão ao tentar remover.");
+    }
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -1687,7 +1711,48 @@ export default function AdminPage() {
                 >
                   {loadingIndex ? "Carregando..." : "🔍 Ver status dos documentos"}
                 </button>
+                <button
+                  onClick={handlePortfolioPreview}
+                  disabled={loadingPortfolioPreview}
+                  className="text-sm font-semibold px-5 py-2.5 rounded-xl disabled:opacity-60 border"
+                  style={{ borderColor: "#7c3aed", color: "#7c3aed", background: "white" }}
+                >
+                  {loadingPortfolioPreview ? "Carregando..." : "📋 Diagnóstico do Portifólio"}
+                </button>
               </div>
+
+              {/* Modal de diagnóstico do portifólio */}
+              {showPortfolioPreview && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setShowPortfolioPreview(false)}>
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#EAE6DC" }}>
+                      <div>
+                        <p className="text-sm font-bold" style={{ color: "#00213A" }}>Diagnóstico do Portifólio</p>
+                        {portfolioPreview?.source && (
+                          <p className="text-xs text-gray-400 mt-0.5">Arquivo: {portfolioPreview.source} · {portfolioPreview.total_chunks} chunks</p>
+                        )}
+                      </div>
+                      <button onClick={() => setShowPortfolioPreview(false)} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
+                    </div>
+                    <div className="overflow-y-auto px-5 py-4 flex-1">
+                      {loadingPortfolioPreview ? (
+                        <p className="text-sm text-center py-6 text-gray-400">Carregando texto extraído...</p>
+                      ) : !portfolioPreview?.source ? (
+                        <p className="text-sm text-center py-4 text-red-500">⚠️ Portifólio não encontrado no banco. Faça o upload na aba Especiais e clique em Re-indexar.</p>
+                      ) : portfolioPreview.lines.length === 0 ? (
+                        <p className="text-sm text-center py-4 text-yellow-600">⚠️ Arquivo encontrado mas sem texto extraível. O arquivo pode ser uma imagem/scan. Tente exportar como PDF com texto selecionável.</p>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs text-gray-400 mb-2">Primeiras linhas extraídas do arquivo (máx. 80):</p>
+                          {portfolioPreview.lines.map((line, i) => (
+                            <p key={i} className="text-xs font-mono px-2 py-1 rounded" style={{ background: i % 2 === 0 ? "#F5F2EC" : "white", color: "#333" }}>{line}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Painel de diagnóstico por documento */}
               {indexStatus && (

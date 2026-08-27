@@ -827,22 +827,54 @@ def portfolio_items(user: dict = Depends(get_current_user)):
     full_text = "\n".join(c["text"] for c in chunks)
     items = []
     seen = set()
+    # Padrões aceitos (ordem de preferência):
+    # "1. Ramo", "1) Ramo", "1: Ramo", "1 - Ramo", "1 – Ramo"  (separador obrigatório)
+    # "(1) Ramo", "[1] Ramo"  (número entre parênteses/colchetes)
+    # "001 | Ramo" (formato de tabela extraída)
+    # "RAMO 001 - Texto"  (prefixo RAMO)
+    _re_items = [
+        re.compile(r'^[(\[]?(\d{1,4})[)\]]?\s*[.):\-–|]\s*(.+)'),    # formatos principais
+        re.compile(r'^ramo\s+(\d{1,6})\s*[.\-–:]?\s*(.+)', re.IGNORECASE),  # "RAMO 001 Texto"
+    ]
     for line in full_text.splitlines():
         line = line.strip()
         if not line:
             continue
-        # Padrão: número seguido de ponto, parêntese ou traço → "1. Automóvel", "2) Vida", "3 - Caminhão"
-        m = re.match(r'^(\d{1,3})\s*[.):\-–]\s*(.+)', line)
+        m = None
+        for pat in _re_items:
+            m = pat.match(line)
+            if m:
+                break
         if m:
             label = m.group(2).strip()
-            num = int(m.group(1))
+            # Remove sufixos gerados pela extração de tabelas (ex: " | info extra")
+            label = label.split(" | ")[0].strip()
+            if not label:
+                continue
+            try:
+                num = int(m.group(1))
+            except ValueError:
+                continue
             key = label.lower()[:30]
             if key not in seen:
                 seen.add(key)
                 items.append({"num": num, "label": label})
-    # Ordena pelo número
     items.sort(key=lambda x: x["num"])
     return {"items": items, "source": source}
+
+
+@app.get("/admin/portfolio-preview")
+def portfolio_preview(user: dict = Depends(require_admin)):
+    """Retorna as primeiras 80 linhas extraídas do arquivo de portifólio, para diagnóstico."""
+    from rag import find_portfolio_source
+    from insurers import get_all_chunks
+    source = find_portfolio_source()
+    if not source:
+        return {"source": None, "lines": []}
+    chunks = get_all_chunks(source)
+    full_text = "\n".join(c["text"] for c in chunks)
+    lines = [l for l in full_text.splitlines() if l.strip()][:80]
+    return {"source": source, "total_chunks": len(chunks), "lines": lines}
 
 
 @app.get("/assistance")

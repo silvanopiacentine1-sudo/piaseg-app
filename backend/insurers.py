@@ -526,14 +526,16 @@ def delete_pdf(filename: str) -> bool:
 
 
 def delete_especial(filename: str) -> bool:
-    """Remove arquivo da pasta especiais e desvincula do índice."""
-    pdf_path = ESPECIAIS_FOLDER / _nfc(filename)
-    if not pdf_path.exists():
-        pdf_path = ESPECIAIS_FOLDER / _nfd(filename)
-        if not pdf_path.exists():
-            return False
+    """Remove arquivo da pasta especiais e desvincula do índice.
+    Sempre limpa os chunks do banco, mesmo que o arquivo não exista em disco."""
     _delete_chunks_and_manifest(filename)
-    pdf_path.unlink()
+    for name in (_nfc(filename), _nfd(filename)):
+        pdf_path = ESPECIAIS_FOLDER / name
+        if pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except OSError as e:
+                print(f"[delete_especial] erro ao remover arquivo {pdf_path}: {e}")
     return True
 
 
