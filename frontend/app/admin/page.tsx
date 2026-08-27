@@ -168,7 +168,8 @@ export default function AdminPage() {
   interface DiskStatus { data_dir: string; persistent: boolean; writable: boolean; free_mb: number; }
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
   interface IndexDoc { file: string; category: string; insurer: string; chunks: number; indexed: boolean; file_exists: boolean; size_kb: number; type: string; }
-  const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; total_chunks: number } | null>(null);
+  interface EspecialDoc { file: string; chunks: number; indexed: boolean; }
+  const [indexStatus, setIndexStatus] = useState<{ products: IndexDoc[]; especiais: EspecialDoc[]; total_chunks: number } | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(false);
 
   useEffect(() => {
@@ -1710,8 +1711,29 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody>
+                          {/* Arquivos Especiais */}
+                          {(indexStatus.especiais || []).map((doc, i) => (
+                            <tr key={`esp-${i}`} style={{ borderTop: "1px solid #EAE6DC" }}>
+                              <td className="px-3 py-2">
+                                <span style={{ display: "inline-block", padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 600, background: "#faf5ff", color: "#7c3aed", border: "1px solid #e9d5ff" }}>
+                                  📋 Especial
+                                </span>
+                              </td>
+                              <td className="px-3 py-2" style={{ color: "#888" }} colSpan={2}>{doc.file}</td>
+                              <td className="px-3 py-2 text-right" style={{ color: "#888" }}>—</td>
+                              <td className="px-3 py-2 text-right" style={{ color: "#111" }}>{doc.chunks}</td>
+                              <td className="px-3 py-2 text-center">
+                                {doc.indexed ? (
+                                  <span style={{ color: "#16a34a" }}>✓ Indexado</span>
+                                ) : (
+                                  <span style={{ color: "#ca8a04" }}>⚠️ Sem texto extraível</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {/* Produtos e Assistências */}
                           {indexStatus.products.map((doc, i) => (
-                            <tr key={i} style={{ borderTop: "1px solid #EAE6DC" }}>
+                            <tr key={`prod-${i}`} style={{ borderTop: "1px solid #EAE6DC" }}>
                               <td className="px-3 py-2">
                                 <span style={{
                                   display: "inline-block",
@@ -1740,7 +1762,7 @@ export default function AdminPage() {
                                 ) : doc.indexed ? (
                                   <span style={{ color: "#16a34a" }}>✓ Indexado</span>
                                 ) : (
-                                  <span style={{ color: "#ca8a04" }}>⚠️ PDF sem texto</span>
+                                  <span style={{ color: "#ca8a04" }}>⚠️ Sem texto extraível</span>
                                 )}
                               </td>
                             </tr>
