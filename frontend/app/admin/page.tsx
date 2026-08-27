@@ -173,7 +173,7 @@ export default function AdminPage() {
   const [loadingIndex, setLoadingIndex] = useState(false);
 
   // Diagnóstico do portifólio
-  interface PortfolioPreview { source: string | null; total_chunks: number; lines: string[]; }
+  interface PortfolioPreview { source: string | null; total_chunks: number; lines: string[]; items_found: number; items_preview: { num: number; label: string }[]; }
   const [portfolioPreview, setPortfolioPreview] = useState<PortfolioPreview | null>(null);
   const [loadingPortfolioPreview, setLoadingPortfolioPreview] = useState(false);
   const [showPortfolioPreview, setShowPortfolioPreview] = useState(false);
@@ -1740,13 +1740,29 @@ export default function AdminPage() {
                       ) : !portfolioPreview?.source ? (
                         <p className="text-sm text-center py-4 text-red-500">⚠️ Portifólio não encontrado no banco. Faça o upload na aba Especiais e clique em Re-indexar.</p>
                       ) : portfolioPreview.lines.length === 0 ? (
-                        <p className="text-sm text-center py-4 text-yellow-600">⚠️ Arquivo encontrado mas sem texto extraível. O arquivo pode ser uma imagem/scan. Tente exportar como PDF com texto selecionável.</p>
+                        <p className="text-sm text-center py-4 text-yellow-600">⚠️ Arquivo encontrado mas sem texto extraível. O arquivo pode ser uma imagem/scan.</p>
                       ) : (
-                        <div className="flex flex-col gap-1">
-                          <p className="text-xs text-gray-400 mb-2">Primeiras linhas extraídas do arquivo (máx. 80):</p>
-                          {portfolioPreview.lines.map((line, i) => (
-                            <p key={i} className="text-xs font-mono px-2 py-1 rounded" style={{ background: i % 2 === 0 ? "#F5F2EC" : "white", color: "#333" }}>{line}</p>
-                          ))}
+                        <div className="flex flex-col gap-3">
+                          {/* Itens detectados pelo regex */}
+                          <div className="rounded-xl p-3" style={{ background: portfolioPreview.items_found > 0 ? "#f0fdf4" : "#fef2f2", border: `1px solid ${portfolioPreview.items_found > 0 ? "#bbf7d0" : "#fecaca"}` }}>
+                            <p className="text-xs font-semibold mb-1" style={{ color: portfolioPreview.items_found > 0 ? "#15803d" : "#dc2626" }}>
+                              {portfolioPreview.items_found > 0 ? `✓ ${portfolioPreview.items_found} produtos detectados` : "⚠️ 0 produtos detectados — formato não reconhecido pelo sistema"}
+                            </p>
+                            {portfolioPreview.items_preview.length > 0 && (
+                              <p className="text-xs" style={{ color: "#166534" }}>
+                                Ex: {portfolioPreview.items_preview.slice(0, 3).map(i => `${i.num}. ${i.label}`).join(" · ")}
+                              </p>
+                            )}
+                          </div>
+                          {/* Linhas brutas */}
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Primeiras linhas brutas (máx. 80) — copie e envie para suporte se houver problema:</p>
+                            <div className="flex flex-col gap-0.5 max-h-52 overflow-y-auto">
+                              {portfolioPreview.lines.map((line, i) => (
+                                <p key={i} className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: i % 2 === 0 ? "#F5F2EC" : "white", color: "#333" }}>{line}</p>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>

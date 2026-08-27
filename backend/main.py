@@ -822,9 +822,12 @@ def portfolio_items(user: dict = Depends(get_current_user)):
     if not source:
         return {"items": [], "source": None}
     chunks = get_all_chunks(source)
+    print(f"[portfolio/items] source={source!r} chunks={len(chunks)}")
     if not chunks:
         return {"items": [], "source": source}
     full_text = "\n".join(c["text"] for c in chunks)
+    sample = [l.strip() for l in full_text.splitlines() if l.strip()][:5]
+    print(f"[portfolio/items] primeiras linhas: {sample}")
     items = []
     seen = set()
     # Padrões aceitos (ordem de preferência):
@@ -860,21 +863,51 @@ def portfolio_items(user: dict = Depends(get_current_user)):
                 seen.add(key)
                 items.append({"num": num, "label": label})
     items.sort(key=lambda x: x["num"])
+    print(f"[portfolio/items] itens encontrados: {len(items)} | primeiros: {[i['label'] for i in items[:3]]}")
     return {"items": items, "source": source}
 
 
 @app.get("/admin/portfolio-preview")
 def portfolio_preview(user: dict = Depends(require_admin)):
-    """Retorna as primeiras 80 linhas extraídas do arquivo de portifólio, para diagnóstico."""
+    """Retorna diagnóstico completo: linhas brutas + itens que seriam exibidos no chat."""
     from rag import find_portfolio_source
     from insurers import get_all_chunks
     source = find_portfolio_source()
     if not source:
-        return {"source": None, "lines": []}
+        return {"source": None, "lines": [], "items_found": 0, "items_preview": []}
     chunks = get_all_chunks(source)
     full_text = "\n".join(c["text"] for c in chunks)
     lines = [l for l in full_text.splitlines() if l.strip()][:80]
-    return {"source": source, "total_chunks": len(chunks), "lines": lines}
+
+    # Roda o mesmo regex do /portfolio/items para mostrar o que está sendo capturado
+    _re_diag = [
+        re.compile(r'^[(\[]?(\d{1,4})[)\]]?\s*[.):\-–|]\s*(.+)'),
+        re.compile(r'^ramo\s+(\d{1,6})\s*[.\-–:]?\s*(.+)', re.IGNORECASE),
+    ]
+    items_d, seen_d = [], set()
+    for raw in full_text.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        for pat in _re_diag:
+            m = pat.match(raw)
+            if m:
+                lbl = m.group(2).strip().split(" | ")[0].strip()
+                if lbl and lbl.lower()[:30] not in seen_d:
+                    seen_d.add(lbl.lower()[:30])
+                    try:
+                        items_d.append({"num": int(m.group(1)), "label": lbl})
+                    except ValueError:
+                        pass
+                break
+    items_d.sort(key=lambda x: x["num"])
+    return {
+        "source": source,
+        "total_chunks": len(chunks),
+        "lines": lines,
+        "items_found": len(items_d),
+        "items_preview": items_d[:10],
+    }
 
 
 @app.get("/assistance")
