@@ -48,10 +48,10 @@ def authenticate(username: str, password: str) -> Optional[dict]:
     return None
 
 
-def create_token(username: str, name: str, is_admin: bool = False) -> str:
+def create_token(username: str, name: str, is_admin: bool = False, grupo_producao: Optional[str] = None) -> str:
     expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     return jwt.encode(
-        {"sub": username, "name": name, "is_admin": is_admin, "exp": expire},
+        {"sub": username, "name": name, "is_admin": is_admin, "grupo_producao": grupo_producao, "exp": expire},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
