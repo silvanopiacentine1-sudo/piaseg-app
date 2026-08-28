@@ -14,7 +14,7 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import List
+from typing import List, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -58,6 +58,13 @@ QUIVER_JSON_PATH = DATA_DIR / "quiver_links.json"
 PRODUCTS_JSON_PATH = DATA_DIR / "products.json"
 SERVICES_JSON_PATH = DATA_DIR / "services.json"
 FAQ_CATEGORIES_JSON_PATH = DATA_DIR / "faq_categories.json"
+CONVERSAO_JSON_PATH = DATA_DIR / "conversao_vendas.json"
+
+MESES_PT = {
+    "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+    "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+    "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro",
+}
 
 
 def _load_faq_categories() -> list:
@@ -91,6 +98,17 @@ def _load_quiver() -> list:
 def _save_quiver(data: list) -> None:
     QUIVER_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     QUIVER_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_conversao() -> dict:
+    if not CONVERSAO_JSON_PATH.exists():
+        return {"updated_at": None, "months": {}}
+    return json.loads(CONVERSAO_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_conversao(data: dict) -> None:
+    CONVERSAO_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONVERSAO_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _safe_text(text: str) -> str:
@@ -189,7 +207,7 @@ def _generate_backup_zip() -> tuple:
     buf = io.BytesIO()
     stats: dict = {"jsons": [], "pdfs": [], "total_mb": 0.0}
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for fname in ["users.json", "faq_data.json", "assistance_contacts.json", "quiver_links.json", "products.json", "services.json"]:
+        for fname in ["users.json", "faq_data.json", "assistance_contacts.json", "quiver_links.json", "products.json", "services.json", "conversao_vendas.json"]:
             p = DATA_DIR / fname
             if p.exists():
                 zf.write(p, fname)
@@ -463,6 +481,7 @@ class UserCreate(BaseModel):
     name: str
     password: str
     is_admin: bool = False
+    grupo_producao: Optional[str] = None
 
 
 class AssistanceContact(BaseModel):
@@ -769,7 +788,7 @@ def delete_faq_category(cat_id: str, user: dict = Depends(require_admin)):
 @app.get("/admin/users")
 def list_users_endpoint(user: dict = Depends(require_admin)):
     return [
-        {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False)}
+        {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False), "grupo_producao": u.get("grupo_producao")}
         for u in load_users()
     ]
 
@@ -779,7 +798,13 @@ def create_user_endpoint(body: UserCreate, user: dict = Depends(require_admin)):
     if not body.username.strip() or not body.name.strip() or not body.password:
         raise HTTPException(status_code=400, detail="Todos os campos são obrigatórios")
     try:
-        return create_user(body.username.strip(), body.name.strip(), body.password, body.is_admin)
+        return create_user(
+            body.username.strip(),
+            body.name.strip(),
+            body.password,
+            body.is_admin,
+            grupo_producao=(body.grupo_producao or "").strip() or None,
+        )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -788,6 +813,7 @@ class UserUpdate(BaseModel):
     name: str
     password: str = ""
     is_admin: bool = False
+    grupo_producao: Optional[str] = None
 
 
 @app.put("/admin/users/{username}")
@@ -799,6 +825,7 @@ def update_user_endpoint(username: str, body: UserUpdate, current_user: dict = D
         name=body.name.strip() or None,
         password=body.password or None,
         is_admin=body.is_admin,
+        grupo_producao=(body.grupo_producao or "").strip() or None,
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -812,6 +839,127 @@ def delete_user_endpoint(username: str, current_user: dict = Depends(require_adm
     if not delete_user(username):
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     return {"ok": True}
+
+
+# ---------- Conversão de Vendas (cotações x negócios efetivados por franqueado) ----------
+
+class ConversaoRamo(BaseModel):
+    ramo: str
+    cotacoes: int
+    negocios: int
+    conversao_pct: float
+
+
+class ConversaoGroupData(BaseModel):
+    cotacoes: int
+    negocios: int
+    conversao_pct: float
+    ramos: List[ConversaoRamo] = []
+
+
+class ConversaoMonthPush(BaseModel):
+    label: str = ""
+    groups: dict[str, ConversaoGroupData]
+
+
+MONTH_KEY_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+@app.post("/admin/conversao-vendas/months/{month_key}")
+def push_conversao_month(month_key: str, body: ConversaoMonthPush, user: dict = Depends(require_admin)):
+    if not MONTH_KEY_RE.match(month_key):
+        raise HTTPException(status_code=400, detail="month_key deve estar no formato YYYY-MM")
+    data = _load_conversao()
+    label = body.label.strip()
+    if not label:
+        ano, mes = month_key.split("-")
+        label = f"{MESES_PT.get(mes, mes)}/{ano}"
+    data["months"][month_key] = {
+        "label": label,
+        "groups": {name: g.model_dump() for name, g in body.groups.items()},
+    }
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _save_conversao(data)
+    return {"ok": True, "month": month_key, "groups": len(body.groups)}
+
+
+@app.get("/admin/conversao-vendas/months")
+def list_conversao_months(user: dict = Depends(require_admin)):
+    data = _load_conversao()
+    months = [
+        {"month": k, "label": v.get("label", k), "groups": len(v.get("groups", {}))}
+        for k, v in sorted(data.get("months", {}).items())
+    ]
+    return {"updated_at": data.get("updated_at"), "months": months}
+
+
+@app.delete("/admin/conversao-vendas/months/{month_key}")
+def delete_conversao_month(month_key: str, user: dict = Depends(require_admin)):
+    data = _load_conversao()
+    if month_key not in data.get("months", {}):
+        raise HTTPException(status_code=404, detail="Mês não encontrado")
+    del data["months"][month_key]
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _save_conversao(data)
+    return {"ok": True}
+
+
+def _accumulate_conversao(month_entries: list) -> dict:
+    total_cot = sum(m["cotacoes"] for m in month_entries)
+    total_neg = sum(m["negocios"] for m in month_entries)
+    ramos_acc: dict = {}
+    for m in month_entries:
+        for r in m.get("ramos", []):
+            acc = ramos_acc.setdefault(r["ramo"], {"cotacoes": 0, "negocios": 0})
+            acc["cotacoes"] += r["cotacoes"]
+            acc["negocios"] += r["negocios"]
+    ramos = [
+        {
+            "ramo": nome,
+            "cotacoes": v["cotacoes"],
+            "negocios": v["negocios"],
+            "conversao_pct": round(v["negocios"] / v["cotacoes"] * 100, 1) if v["cotacoes"] else 0.0,
+        }
+        for nome, v in sorted(ramos_acc.items())
+    ]
+    return {
+        "cotacoes": total_cot,
+        "negocios": total_neg,
+        "conversao_pct": round(total_neg / total_cot * 100, 1) if total_cot else 0.0,
+        "ramos": ramos,
+    }
+
+
+@app.get("/conversao-vendas/me")
+def my_conversao(user: dict = Depends(get_current_user)):
+    users = load_users()
+    record = next((u for u in users if u["username"] == user["sub"]), None)
+    grupo = (record or {}).get("grupo_producao")
+    if not grupo:
+        return {"mapped": False}
+
+    data = _load_conversao()
+    months = data.get("months", {})
+    available_months = []
+    monthly = {}
+    month_entries = []
+    for month_key in sorted(months.keys(), reverse=True):
+        month = months[month_key]
+        g = month.get("groups", {}).get(grupo)
+        if not g:
+            continue
+        available_months.append({"month": month_key, "label": month.get("label", month_key)})
+        monthly[month_key] = g
+        month_entries.append(g)
+
+    accumulated = _accumulate_conversao(month_entries) if month_entries else None
+    return {
+        "mapped": True,
+        "grupo_producao": grupo,
+        "available_months": available_months,
+        "monthly": monthly,
+        "accumulated": accumulated,
+    }
 
 
 @app.get("/portfolio/items")

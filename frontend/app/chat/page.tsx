@@ -463,6 +463,28 @@ export default function ChatPage() {
         </div>
       </header>
 
+      {/* Teaser: Sua Conversão de Vendas (em breve) */}
+      <div className="px-4 pt-3 flex-shrink-0">
+        <div
+          className="rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
+          style={{ background: "white", border: "1px solid #EAE6DC" }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-lg flex-shrink-0">📈</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: "#00213A" }}>Sua Conversão de Vendas</p>
+              <p className="text-xs text-gray-500 truncate">Acompanhe suas cotações e negócios efetivados</p>
+            </div>
+          </div>
+          <span
+            className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
+            style={{ background: "#EAE6DC", color: "#9a7d4a" }}
+          >
+            Em breve
+          </span>
+        </div>
+      </div>
+
       {/* Mensagens */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.map((msg, i) => (

@@ -22,7 +22,63 @@ interface UserItem {
   username: string;
   name: string;
   is_admin: boolean;
+  grupo_producao?: string | null;
 }
+
+// Grupos de Produção conhecidos (planilhas de Cotação x Conversão) — usado pra vincular
+// cada login ao franqueado dono da conta, para o dashboard "Sua Conversão de Vendas".
+const GRUPOS_PRODUCAO = [
+  "ALENCAR VEICULOS - FR - VENDAS",
+  "ALEXANDRE NEVES - PIASEG CONSULTORIA",
+  "ALEXANDRE SILVA AMORIM - PIASEG CONSULTORIA",
+  "ANA CAROLINE / TERRA - PIASEG CONSULTORIA",
+  "BRUNO HENRIQUE NOIA ARRUDA - FR",
+  "BRUNO LOURENCO GIROTTO - PIASEG CONSULTORIA",
+  "CARLOS EDUARDO - FR - PIASEG CONSULTORIA",
+  "CELSO CARLOS CAVALLIERI JUNIOR - FR",
+  "CLAUDIA TATIANE DE MOURA - PIASEG CONSULTORIA",
+  "CONSULTORIA / PIASEG",
+  "CYNTIA AMORIM",
+  "DANIELE MARCELINO - PIASEG CONSULTORIA",
+  "DAYWID WILLIAM - PIASEG CONSULTORIA",
+  "DNAMARA SILVA - PIASEG CONSULTORIA",
+  "ELIARA RODRIGUES - FRANQUEADO",
+  "EMELY TAYLOR / TERRA - PIASEG CONSULTORIA",
+  "EMMILY LILIDHY / TERRA - PIASEG CONSULTORIA",
+  "ERNANI JOSE KRAICH - FRANQUEADO",
+  "FABIANA TEIXEIRA REZENDE - FRANQUEADO",
+  "FERNANDO SILVA - PIASEG CONSULTORIA",
+  "GABRIEL CAIXETA - PIASEG CONSULTORIA",
+  "ILSON GOMES DA SILVA - PIASEG CONSULTORIA",
+  "JOAO ANTONIO BOEIRA - FRANQUEADO",
+  "JULIA GABRIELA / TERRA - PIASEG CONSULTORIA",
+  "JULIANO ROCHA BRAGA - FRANQUEADO",
+  "JULIO SARTORELLI - PIASEG CONSULTORIA",
+  "KASSIA REGINA LEANDRO CANUTO - PIASEG CONSULTORIA",
+  "KEVIN FERREIRA / TERRA - PIASEG CONSULTORIA",
+  "LAISA CRISTINE PASQUALATO - PIASEG CONSULTORIA",
+  "LEANDRO LIMA DE ALENCAR",
+  "LINDOMAR PERUSSATTO - PIASEG CONSULTORIA",
+  "LUCAS JIKAL - PIASEG CONSULTORIA",
+  "MANO MOTORS - FR - SCHEILA REINISCH",
+  "MARLI CANDIDA DE OLIVEIRA - FRANQUEADO",
+  "MATHEUS LEITE FAIETE - FRANQUEADO",
+  "MAURICIO PARDINHO - PIASEG CONSULTORIA",
+  "MIKAEL LEE / LJKL  - PIASEG CONSULTORIA",
+  "MONICA ELEN / TERRA - PIASEG CONSULTORIA",
+  "NATALIA GIMENES - FR VALE REPR",
+  "PIASEG CORRETORA",
+  "RENATA PIRES AMOROSO LIMA - PIASEG CONSULTORIA",
+  "RICARDO PORTELA - PIASEG CONSULTORIA",
+  "ROQUE / IVAN - PIASEG CONSULTORIA",
+  "ROQUE HOSANO CRUZ - PIASEG CONSULTORIA",
+  "SEGMAIOR - FRANQUEADO PIASEG",
+  "SONIMAR MACHADO - PIASEG CONSULTORIA",
+  "THALIA CRISTHINA / TERRA - PIASEG CONSULTORIA",
+  "THIAGO AGUILERA - FRANQUEADO PIASEG",
+  "VANESSA FAVERI DEMAMANN - FRANQUEADO",
+  "WILSON / LP",
+];
 
 interface QuiverItem {
   id: string;
@@ -95,6 +151,7 @@ export default function AdminPage() {
   const [editUserName, setEditUserName] = useState("");
   const [editUserPassword, setEditUserPassword] = useState("");
   const [editUserIsAdmin, setEditUserIsAdmin] = useState(false);
+  const [editUserGrupoProducao, setEditUserGrupoProducao] = useState("");
 
   // Users tab state
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -102,6 +159,7 @@ export default function AdminPage() {
   const [newName, setNewName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newIsAdmin, setNewIsAdmin] = useState(false);
+  const [newGrupoProducao, setNewGrupoProducao] = useState("");
   const [savingUser, setSavingUser] = useState(false);
   const [userMsg, setUserMsg] = useState("");
 
@@ -869,6 +927,7 @@ export default function AdminPage() {
           name: newName.trim(),
           password: newPassword,
           is_admin: newIsAdmin,
+          grupo_producao: newGrupoProducao || null,
         }),
       });
       const data = await res.json();
@@ -878,6 +937,7 @@ export default function AdminPage() {
       setNewName("");
       setNewPassword("");
       setNewIsAdmin(false);
+      setNewGrupoProducao("");
       await loadUsers(token);
     } catch {
       setUserMsg("Erro ao conectar ao servidor.");
@@ -891,11 +951,11 @@ export default function AdminPage() {
       const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: editUserName, password: editUserPassword, is_admin: editUserIsAdmin }),
+        body: JSON.stringify({ name: editUserName, password: editUserPassword, is_admin: editUserIsAdmin, grupo_producao: editUserGrupoProducao || null }),
       });
       if (res.ok) {
         const updated = await res.json();
-        setUsers((prev) => prev.map((u) => u.username === username ? { ...u, name: updated.name, is_admin: updated.is_admin } : u));
+        setUsers((prev) => prev.map((u) => u.username === username ? { ...u, name: updated.name, is_admin: updated.is_admin, grupo_producao: updated.grupo_producao } : u));
         setEditingUsername(null);
         setEditUserPassword("");
       }
@@ -1568,6 +1628,15 @@ export default function AdminPage() {
                   <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres"
                     className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                 </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#00213A" }}>Grupo de Produção (franqueado)</label>
+                  <select value={newGrupoProducao} onChange={(e) => setNewGrupoProducao(e.target.value)}
+                    className="w-full mt-1.5 px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                    <option value="">— Nenhum —</option>
+                    {GRUPOS_PRODUCAO.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1">Vincula essa conta ao franqueado dono, para exibir "Sua Conversão de Vendas".</p>
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={newIsAdmin} onChange={(e) => setNewIsAdmin(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: "#B8975C" }} />
                   <span className="text-xs text-gray-600">Dar permissão de administrador</span>
@@ -1595,6 +1664,11 @@ export default function AdminPage() {
                       <div className="flex flex-col gap-2">
                         <input value={editUserName} onChange={(e) => setEditUserName(e.target.value)} placeholder="Nome completo" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
                         <input type="password" value={editUserPassword} onChange={(e) => setEditUserPassword(e.target.value)} placeholder="Nova senha (deixe em branco para manter)" className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                        <select value={editUserGrupoProducao} onChange={(e) => setEditUserGrupoProducao(e.target.value)}
+                          className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }}>
+                          <option value="">— Nenhum grupo de produção —</option>
+                          {GRUPOS_PRODUCAO.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
                         <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
                           <input type="checkbox" checked={editUserIsAdmin} onChange={(e) => setEditUserIsAdmin(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: "#B8975C" }} />
                           Administrador
@@ -1613,11 +1687,15 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <p className="text-sm font-semibold" style={{ color: "#00213A" }}>{u.name}</p>
-                            <p className="text-xs text-gray-400">@{u.username}{u.is_admin && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>admin</span>}</p>
+                            <p className="text-xs text-gray-400">
+                              @{u.username}
+                              {u.is_admin && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAE6DC", color: "#9a7d4a" }}>admin</span>}
+                              {u.grupo_producao && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(184,151,92,0.15)", color: "#B8975C" }}>{u.grupo_producao}</span>}
+                            </p>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => { setEditingUsername(u.username); setEditUserName(u.name); setEditUserIsAdmin(u.is_admin); setEditUserPassword(""); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                          <button onClick={() => { setEditingUsername(u.username); setEditUserName(u.name); setEditUserIsAdmin(u.is_admin); setEditUserPassword(""); setEditUserGrupoProducao(u.grupo_producao ?? ""); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
                           {u.username !== "admin" && <button onClick={() => handleDeleteUser(u.username, u.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>}
                         </div>
                       </div>

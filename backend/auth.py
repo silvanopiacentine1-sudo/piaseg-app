@@ -64,7 +64,7 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-def create_user(username: str, name: str, password: str, is_admin: bool = False) -> dict:
+def create_user(username: str, name: str, password: str, is_admin: bool = False, grupo_producao: Optional[str] = None) -> dict:
     users = load_users()
     if any(u["username"] == username for u in users):
         raise ValueError(f"Usuário '{username}' já existe")
@@ -73,13 +73,14 @@ def create_user(username: str, name: str, password: str, is_admin: bool = False)
         "name": name,
         "password_hash": hash_password(password),
         "is_admin": is_admin,
+        "grupo_producao": grupo_producao,
     }
     users.append(new_user)
     save_users(users)
-    return {"username": username, "name": name, "is_admin": is_admin}
+    return {"username": username, "name": name, "is_admin": is_admin, "grupo_producao": grupo_producao}
 
 
-def update_user(username: str, name: Optional[str] = None, password: Optional[str] = None, is_admin: Optional[bool] = None) -> Optional[dict]:
+def update_user(username: str, name: Optional[str] = None, password: Optional[str] = None, is_admin: Optional[bool] = None, grupo_producao: Optional[str] = None) -> Optional[dict]:
     users = load_users()
     for u in users:
         if u["username"] == username:
@@ -89,8 +90,9 @@ def update_user(username: str, name: Optional[str] = None, password: Optional[st
                 u["password_hash"] = hash_password(password)
             if is_admin is not None:
                 u["is_admin"] = is_admin
+            u["grupo_producao"] = grupo_producao
             save_users(users)
-            return {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False)}
+            return {"username": u["username"], "name": u["name"], "is_admin": u.get("is_admin", False), "grupo_producao": u.get("grupo_producao")}
     return None
 
 
