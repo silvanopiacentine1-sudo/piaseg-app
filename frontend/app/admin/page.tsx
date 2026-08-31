@@ -28,6 +28,7 @@ interface UserItem {
 // Grupos de Produção conhecidos (planilhas de Cotação x Conversão) — usado pra vincular
 // cada login ao franqueado dono da conta, para o dashboard "Sua Conversão de Vendas".
 const GRUPOS_PRODUCAO = [
+  "ABEL JUNIOR - PIASEG CONSULTORIA",
   "ALENCAR VEICULOS - FR - VENDAS",
   "ALEXANDRE NEVES - PIASEG CONSULTORIA",
   "ALEXANDRE SILVA AMORIM - PIASEG CONSULTORIA",
@@ -62,6 +63,7 @@ const GRUPOS_PRODUCAO = [
   "MARLI CANDIDA DE OLIVEIRA - FRANQUEADO",
   "MATHEUS LEITE FAIETE - FRANQUEADO",
   "MAURICIO PARDINHO - PIASEG CONSULTORIA",
+  "MAYARA TOMAZ - PIASEG CONSULTORIA",
   "MIKAEL LEE / LJKL  - PIASEG CONSULTORIA",
   "NATALIA GIMENES - FR VALE REPR",
   "PIASEG CORRETORA",
