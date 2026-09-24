@@ -86,6 +86,12 @@ interface QuiverItem {
   url: string;
 }
 
+interface VoceSabiaItem {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -113,7 +119,7 @@ export default function AdminPage() {
   const replaceEspecialInputRef = useRef<HTMLInputElement>(null);
   const [replacingEspecial, setReplacingEspecial] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "produtos" | "servicos" | "backup">("produtos");
+  const [activeTab, setActiveTab] = useState<"faq" | "pdfs" | "especiais" | "assistance" | "users" | "quiver" | "voce-sabia" | "produtos" | "servicos" | "backup">("produtos");
 
   // Assistance tab state
   interface AssistanceContact { id: string; name: string; phone: string; whatsapp: string; }
@@ -218,6 +224,16 @@ export default function AdminPage() {
   const [editQuiverName, setEditQuiverName] = useState("");
   const [editQuiverUrl, setEditQuiverUrl] = useState("");
 
+  // Você Sabia? tab state
+  const [voceSabiaItems, setVoceSabiaItems] = useState<VoceSabiaItem[]>([]);
+  const [newVoceSabiaName, setNewVoceSabiaName] = useState("");
+  const [newVoceSabiaUrl, setNewVoceSabiaUrl] = useState("");
+  const [savingVoceSabia, setSavingVoceSabia] = useState(false);
+  const [voceSabiaMsg, setVoceSabiaMsg] = useState("");
+  const [editingVoceSabiaId, setEditingVoceSabiaId] = useState<string | null>(null);
+  const [editVoceSabiaName, setEditVoceSabiaName] = useState("");
+  const [editVoceSabiaUrl, setEditVoceSabiaUrl] = useState("");
+
   // Backup tab state
   const [downloadingBackup, setDownloadingBackup] = useState(false);
   const [backupMsg, setBackupMsg] = useState("");
@@ -247,7 +263,7 @@ export default function AdminPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    await Promise.all([loadFaq(t), loadFaqCategories(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadProducts(t), loadServices(t), loadDiskStatus(t)]);
+    await Promise.all([loadFaq(t), loadFaqCategories(t), loadInsurers(t), loadPdfs(t), loadUsers(t), loadEspeciais(t), loadContacts(t), loadQuiver(t), loadVoceSabia(t), loadProducts(t), loadServices(t), loadDiskStatus(t)]);
     setLoading(false);
   }
 
@@ -586,6 +602,52 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${API}/admin/quiver/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { setQuiverLinks((prev) => prev.filter((l) => l.id !== id)); setQuiverMsg(`✓ "${name}" removido.`); }
+    } catch { /* silencioso */ }
+  }
+
+  async function loadVoceSabia(t: string) {
+    try {
+      const res = await fetch(`${API}/voce-sabia`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setVoceSabiaItems(Array.isArray(data) ? data : []);
+      }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleCreateVoceSabia(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newVoceSabiaName.trim() || !newVoceSabiaUrl.trim()) return;
+    setSavingVoceSabia(true); setVoceSabiaMsg("");
+    try {
+      const res = await fetch(`${API}/admin/voce-sabia`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newVoceSabiaName.trim(), url: newVoceSabiaUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setVoceSabiaMsg(`Erro: ${data.detail ?? "Não foi possível salvar."}`); return; }
+      setVoceSabiaMsg(`✓ "${data.name}" adicionado.`);
+      setNewVoceSabiaName(""); setNewVoceSabiaUrl("");
+      await loadVoceSabia(token);
+    } catch { setVoceSabiaMsg("Erro ao conectar ao servidor."); }
+    finally { setSavingVoceSabia(false); }
+  }
+
+  async function handleSaveVoceSabia(id: string) {
+    try {
+      const res = await fetch(`${API}/admin/voce-sabia/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: editVoceSabiaName, url: editVoceSabiaUrl }),
+      });
+      if (res.ok) { setEditingVoceSabiaId(null); await loadVoceSabia(token); }
+    } catch { /* silencioso */ }
+  }
+
+  async function handleDeleteVoceSabia(id: string, name: string) {
+    if (!confirm(`Remover "${name}"?`)) return;
+    try {
+      const res = await fetch(`${API}/admin/voce-sabia/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { setVoceSabiaItems((prev) => prev.filter((i) => i.id !== id)); setVoceSabiaMsg(`✓ "${name}" removido.`); }
     } catch { /* silencioso */ }
   }
 
@@ -1023,6 +1085,7 @@ export default function AdminPage() {
           <button style={tabStyle("especiais")} onClick={() => setActiveTab("especiais")}>📋 Especiais</button>
           <button style={tabStyle("assistance")} onClick={() => { setActiveTab("assistance"); setContactMsg(""); }}>📞 Telefones</button>
           <button style={tabStyle("quiver")} onClick={() => { setActiveTab("quiver"); setQuiverMsg(""); }}>🎬 Quiver</button>
+          <button style={tabStyle("voce-sabia")} onClick={() => { setActiveTab("voce-sabia"); setVoceSabiaMsg(""); }}>💡 Você Sabia?</button>
           <button style={tabStyle("faq")} onClick={() => setActiveTab("faq")}>💬 FAQ</button>
           <button style={tabStyle("users")} onClick={() => { setActiveTab("users"); setUserMsg(""); }}>👥 Usuários</button>
           <button style={tabStyle("backup")} onClick={() => { setActiveTab("backup"); setBackupMsg(""); }}>💾 Backup</button>
@@ -1471,6 +1534,80 @@ export default function AdminPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ABA: Você Sabia? */}
+        {activeTab === "voce-sabia" && (
+          <div>
+            <div className="rounded-2xl p-5 mb-6" style={{ background: "white", border: "1px solid #EAE6DC" }}>
+              <h2 className="text-sm font-semibold mb-1" style={{ color: "#00213A" }}>Adicionar conteúdo</h2>
+              <p className="text-xs text-gray-500 mb-4">Adicione links de vídeos, PDFs, planilhas, apresentações ou qualquer outro conteúdo. Os usuários verão ao clicar em "Você Sabia?" no chat.</p>
+              <form onSubmit={handleCreateVoceSabia} className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-medium mb-1 block" style={{ color: "#00213A" }}>Título</label>
+                  <input value={newVoceSabiaName} onChange={(e) => setNewVoceSabiaName(e.target.value)} placeholder="Ex: Como funciona o seguro de vida"
+                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1 block" style={{ color: "#00213A" }}>Link (URL)</label>
+                  <input value={newVoceSabiaUrl} onChange={(e) => setNewVoceSabiaUrl(e.target.value)} placeholder="https://... (vídeo, PDF, PPT, Excel, etc.)"
+                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                </div>
+                {voceSabiaMsg && (
+                  <p className="text-xs px-3 py-2 rounded-lg"
+                    style={{ background: voceSabiaMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: voceSabiaMsg.startsWith("✓") ? "#16a34a" : "#dc2626" }}>
+                    {voceSabiaMsg}
+                  </p>
+                )}
+                <button type="submit" disabled={savingVoceSabia || !newVoceSabiaName.trim() || !newVoceSabiaUrl.trim()}
+                  className="py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#00213A" }}>
+                  {savingVoceSabia ? "Salvando..." : "Adicionar"}
+                </button>
+              </form>
+            </div>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#00213A" }}>Conteúdos cadastrados {!loading && `(${voceSabiaItems.length})`}</h2>
+            {loading ? <p className="text-sm text-gray-500">Carregando...</p> : voceSabiaItems.length === 0 ? (
+              <p className="text-sm text-center py-6" style={{ color: "#9a7d4a" }}>Nenhum conteúdo cadastrado ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {voceSabiaItems.map((item) => {
+                  const u = item.url.toLowerCase();
+                  const icon = u.includes("youtube.com") || u.includes("youtu.be") ? "🎬"
+                    : u.endsWith(".pdf") ? "📄"
+                    : u.endsWith(".pptx") || u.endsWith(".ppt") ? "📊"
+                    : u.endsWith(".xlsx") || u.endsWith(".xls") ? "📊"
+                    : u.endsWith(".docx") || u.endsWith(".doc") ? "📝"
+                    : "🔗";
+                  return (
+                    <div key={item.id} className="rounded-xl p-4" style={{ background: "white", border: "1px solid #EAE6DC" }}>
+                      {editingVoceSabiaId === item.id ? (
+                        <div className="flex flex-col gap-2">
+                          <input value={editVoceSabiaName} onChange={(e) => setEditVoceSabiaName(e.target.value)} placeholder="Título" className="px-3 py-2 rounded-lg border text-sm outline-none w-full" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                          <input value={editVoceSabiaUrl} onChange={(e) => setEditVoceSabiaUrl(e.target.value)} placeholder="Link" className="px-3 py-2 rounded-lg border text-sm outline-none w-full" style={{ borderColor: "#EAE6DC", background: "#F5F2EC", color: "#111" }} />
+                          <div className="flex gap-2 mt-1">
+                            <button onClick={() => setEditingVoceSabiaId(null)} className="text-xs px-3 py-1.5 rounded-lg border text-gray-500">Cancelar</button>
+                            <button onClick={() => handleSaveVoceSabia(item.id)} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: "#B8975C" }}>Salvar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl flex-shrink-0">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" style={{ color: "#00213A" }}>{item.name}</p>
+                            <p className="text-xs truncate" style={{ color: "#9a7d4a" }}>{item.url}</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={() => { setEditingVoceSabiaId(item.id); setEditVoceSabiaName(item.name); setEditVoceSabiaUrl(item.url); }} className="text-xs px-2.5 py-1.5 rounded-lg border" style={{ borderColor: "#B8975C", color: "#B8975C" }}>Editar</button>
+                            <button onClick={() => handleDeleteVoceSabia(item.id, item.name)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Remover</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

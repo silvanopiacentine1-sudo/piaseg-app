@@ -89,8 +89,10 @@ export default function ChatPage() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [showAssistance, setShowAssistance] = useState(false);
   const [showQuiver, setShowQuiver] = useState(false);
+  const [showVoceSabia, setShowVoceSabia] = useState(false);
   const [assistanceContacts, setAssistanceContacts] = useState<{ id: string; name: string; phone: string; whatsapp: string }[]>([]);
   const [quiverLinks, setQuiverLinks] = useState<{ id: string; name: string; url: string }[]>([]);
+  const [voceSabiaItems, setVoceSabiaItems] = useState<{ id: string; name: string; url: string }[]>([]);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [endConfirmFromSair, setEndConfirmFromSair] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -110,6 +112,9 @@ export default function ChatPage() {
 
     fetch(`${API}/quiver`, { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json()).then((l) => setQuiverLinks(Array.isArray(l) ? l : [])).catch(() => {});
+
+    fetch(`${API}/voce-sabia`, { headers: { Authorization: `Bearer ${t}` } })
+      .then((r) => r.json()).then((l) => setVoceSabiaItems(Array.isArray(l) ? l : [])).catch(() => {});
 
     Promise.all([
       fetch(`${API}/products`, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json()).catch(() => []),
@@ -446,6 +451,9 @@ export default function ChatPage() {
           <button onClick={openPortfolio} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
             📋 Portifólio
           </button>
+          <button onClick={() => setShowVoceSabia(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
+            💡 Você Sabia?
+          </button>
           <button onClick={() => setShowAssistance(true)} className="text-white/80 text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
             📞 Telefone
           </button>
@@ -462,28 +470,6 @@ export default function ChatPage() {
           </button>
         </div>
       </header>
-
-      {/* Teaser: Sua Conversão de Vendas (em breve) */}
-      <div className="px-4 pt-3 flex-shrink-0">
-        <div
-          className="rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
-          style={{ background: "white", border: "1px solid #EAE6DC" }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg flex-shrink-0">📈</span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate" style={{ color: "#00213A" }}>Sua Conversão de Vendas</p>
-              <p className="text-xs text-gray-500 truncate">Acompanhe suas cotações e negócios efetivados</p>
-            </div>
-          </div>
-          <span
-            className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
-            style={{ background: "#EAE6DC", color: "#9a7d4a" }}
-          >
-            Em breve
-          </span>
-        </div>
-      </div>
 
       {/* Mensagens */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -681,6 +667,45 @@ export default function ChatPage() {
                     <span className="text-center leading-tight">{c.name}</span>
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Você Sabia? */}
+      {showVoceSabia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setShowVoceSabia(false)}>
+          <div className="w-full max-w-lg rounded-2xl px-5 pt-5 pb-6" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-bold text-sm" style={{ color: "#00213A" }}>💡 Você Sabia?</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9a7d4a" }}>Toque para acessar o conteúdo</p>
+              </div>
+              <button onClick={() => setShowVoceSabia(false)} className="text-lg leading-none px-2 py-1 rounded-lg" style={{ color: "#9a7d4a" }}>✕</button>
+            </div>
+            {voceSabiaItems.length === 0 ? (
+              <p className="text-sm text-center py-4" style={{ color: "#9a7d4a" }}>Nenhum conteúdo cadastrado ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                {voceSabiaItems.map((item) => {
+                  const u = item.url.toLowerCase();
+                  const icon = u.includes("youtube.com") || u.includes("youtu.be") ? "🎬"
+                    : u.endsWith(".pdf") ? "📄"
+                    : u.endsWith(".pptx") || u.endsWith(".ppt") ? "📊"
+                    : u.endsWith(".xlsx") || u.endsWith(".xls") ? "📊"
+                    : u.endsWith(".docx") || u.endsWith(".doc") ? "📝"
+                    : "🔗";
+                  return (
+                    <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors active:scale-95"
+                      style={{ borderColor: "#EAE6DC", background: "#F5F2EC", textDecoration: "none" }}
+                      onClick={() => setShowVoceSabia(false)}>
+                      <span className="text-2xl flex-shrink-0">{icon}</span>
+                      <span className="text-sm font-medium" style={{ color: "#00213A" }}>{item.name}</span>
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>

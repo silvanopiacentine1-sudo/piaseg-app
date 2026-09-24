@@ -55,6 +55,7 @@ app = FastAPI(title="Piaseg Seguros API")
 
 ASSISTANCE_JSON_PATH = DATA_DIR / "assistance_contacts.json"
 QUIVER_JSON_PATH = DATA_DIR / "quiver_links.json"
+VOCE_SABIA_JSON_PATH = DATA_DIR / "voce_sabia.json"
 PRODUCTS_JSON_PATH = DATA_DIR / "products.json"
 SERVICES_JSON_PATH = DATA_DIR / "services.json"
 FAQ_CATEGORIES_JSON_PATH = DATA_DIR / "faq_categories.json"
@@ -91,6 +92,17 @@ def _load_quiver() -> list:
 def _save_quiver(data: list) -> None:
     QUIVER_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     QUIVER_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_voce_sabia() -> list:
+    if not VOCE_SABIA_JSON_PATH.exists():
+        return []
+    return json.loads(VOCE_SABIA_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _save_voce_sabia(data: list) -> None:
+    VOCE_SABIA_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    VOCE_SABIA_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _safe_text(text: str) -> str:
@@ -189,7 +201,7 @@ def _generate_backup_zip() -> tuple:
     buf = io.BytesIO()
     stats: dict = {"jsons": [], "pdfs": [], "total_mb": 0.0}
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for fname in ["users.json", "faq_data.json", "assistance_contacts.json", "quiver_links.json", "products.json", "services.json"]:
+        for fname in ["users.json", "faq_data.json", "assistance_contacts.json", "quiver_links.json", "voce_sabia.json", "products.json", "services.json"]:
             p = DATA_DIR / fname
             if p.exists():
                 zf.write(p, fname)
@@ -473,6 +485,11 @@ class AssistanceContact(BaseModel):
 
 
 class QuiverLink(BaseModel):
+    name: str
+    url: str
+
+
+class VoceSabiaItem(BaseModel):
     name: str
     url: str
 
@@ -991,6 +1008,41 @@ def delete_quiver(link_id: str, user: dict = Depends(require_admin)):
     if len(new_data) == len(data):
         raise HTTPException(status_code=404, detail="Link não encontrado")
     _save_quiver(new_data)
+    return {"ok": True}
+
+
+@app.get("/voce-sabia")
+def list_voce_sabia(user: dict = Depends(get_current_user)):
+    return _load_voce_sabia()
+
+
+@app.post("/admin/voce-sabia", status_code=201)
+def create_voce_sabia(body: VoceSabiaItem, user: dict = Depends(require_admin)):
+    item = {"id": uuid.uuid4().hex[:8], "name": body.name, "url": body.url}
+    data = _load_voce_sabia()
+    data.append(item)
+    _save_voce_sabia(data)
+    return item
+
+
+@app.put("/admin/voce-sabia/{item_id}")
+def update_voce_sabia(item_id: str, body: VoceSabiaItem, user: dict = Depends(require_admin)):
+    data = _load_voce_sabia()
+    for i, it in enumerate(data):
+        if it["id"] == item_id:
+            data[i] = {**it, "name": body.name, "url": body.url}
+            _save_voce_sabia(data)
+            return data[i]
+    raise HTTPException(status_code=404, detail="Item não encontrado")
+
+
+@app.delete("/admin/voce-sabia/{item_id}")
+def delete_voce_sabia(item_id: str, user: dict = Depends(require_admin)):
+    data = _load_voce_sabia()
+    new_data = [it for it in data if it["id"] != item_id]
+    if len(new_data) == len(data):
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    _save_voce_sabia(new_data)
     return {"ok": True}
 
 
