@@ -840,6 +840,97 @@ def delete_user_endpoint(username: str, current_user: dict = Depends(require_adm
     return {"ok": True}
 
 
+_PT_CONN = {'E', 'DE', 'DO', 'DA', 'DOS', 'DAS', 'EM', 'NO', 'NA', 'NOS', 'NAS',
+            'COM', 'O', 'A', 'OS', 'AS', 'OU', 'AO', 'AOS', 'POR', 'PARA', 'SEM', 'SOB'}
+
+_SEG_RE = re.compile(r'\b(\d{1,4})[.)]\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃẼĨÕŨÇÀÈÌÒÙÄ][^\d]*?)(?=\s*\b\d{1,4}[.)]|\s*$)', re.UNICODE)
+
+
+def _parse_portfolio_label(segment: str) -> str:
+    """Extrai o nome do produto de um segmento 'PRODUTO SEGURADORA1 SEGURADORA2...'"""
+    if ' | ' in segment:
+        return segment.split(' | ')[0].strip()
+    words = segment.split()
+    label_words: list = []
+    prev_conn = False
+    for w in words:
+        c = w.rstrip('.,;:-')
+        is_caps = c.upper() == c and len(c) >= 4 and c.upper() not in _PT_CONN
+        is_conn = c.upper() in _PT_CONN
+        if not label_words:
+            label_words.append(c)
+        elif prev_conn:
+            label_words.append(c)
+        elif is_caps:
+            break
+        else:
+            label_words.append(c)
+        prev_conn = is_conn
+        if len(label_words) >= 5:
+            break
+    return ' '.join(label_words)
+
+
+def _extract_portfolio_items(full_text: str) -> list:
+    """Extrai itens do portifólio, suportando tanto linhas separadas quanto tudo numa linha só."""
+    items: list = []
+    seen: set = set()
+
+    # Abordagem 1: linha por linha (arquivos com quebra de parágrafo por produto)
+    _re_items = [
+        re.compile(r'^[(\[]?(\d{1,4})[)\]]?\s*[.):\-–|]\s*(.+)'),
+        re.compile(r'^ramo\s+(\d{1,6})\s*[.\-–:]?\s*(.+)', re.IGNORECASE),
+    ]
+    for line in full_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = None
+        for pat in _re_items:
+            m = pat.match(line)
+            if m:
+                break
+        if m:
+            raw = m.group(2).strip()
+            label = raw.split(' | ')[0].strip()
+            # Label longo = blob com múltiplos produtos colados; ignora nesta abordagem
+            if not label or len(label) > 50:
+                continue
+            try:
+                num = int(m.group(1))
+            except ValueError:
+                continue
+            key = label.lower()[:30]
+            if key not in seen:
+                seen.add(key)
+                items.append({'num': num, 'label': label})
+
+    if len(items) >= 5:
+        items.sort(key=lambda x: x['num'])
+        return items
+
+    # Abordagem 2: regex global (todos os produtos colados numa linha só)
+    items = []
+    seen = set()
+    normalized = re.sub(r'\s+', ' ', full_text).strip()
+    for m in _SEG_RE.finditer(normalized):
+        try:
+            num = int(m.group(1))
+        except ValueError:
+            continue
+        label = _parse_portfolio_label(m.group(2).strip())
+        label = label.strip()
+        if not label or len(label) < 2:
+            continue
+        key = label.lower()[:30]
+        if key not in seen:
+            seen.add(key)
+            items.append({'num': num, 'label': label})
+
+    items.sort(key=lambda x: x['num'])
+    return items
+
+
 @app.get("/portfolio/items")
 def portfolio_items(user: dict = Depends(get_current_user)):
     """Retorna os itens do portifólio extraídos dinamicamente do arquivo indexado."""
@@ -853,44 +944,8 @@ def portfolio_items(user: dict = Depends(get_current_user)):
     if not chunks:
         return {"items": [], "source": source}
     full_text = "\n".join(c["text"] for c in chunks)
-    sample = [l.strip() for l in full_text.splitlines() if l.strip()][:5]
-    print(f"[portfolio/items] primeiras linhas: {sample}")
-    items = []
-    seen = set()
-    # Padrões aceitos (ordem de preferência):
-    # "1. Ramo", "1) Ramo", "1: Ramo", "1 - Ramo", "1 – Ramo"  (separador obrigatório)
-    # "(1) Ramo", "[1] Ramo"  (número entre parênteses/colchetes)
-    # "001 | Ramo" (formato de tabela extraída)
-    # "RAMO 001 - Texto"  (prefixo RAMO)
-    _re_items = [
-        re.compile(r'^[(\[]?(\d{1,4})[)\]]?\s*[.):\-–|]\s*(.+)'),    # formatos principais
-        re.compile(r'^ramo\s+(\d{1,6})\s*[.\-–:]?\s*(.+)', re.IGNORECASE),  # "RAMO 001 Texto"
-    ]
-    for line in full_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        m = None
-        for pat in _re_items:
-            m = pat.match(line)
-            if m:
-                break
-        if m:
-            label = m.group(2).strip()
-            # Remove sufixos gerados pela extração de tabelas (ex: " | info extra")
-            label = label.split(" | ")[0].strip()
-            if not label:
-                continue
-            try:
-                num = int(m.group(1))
-            except ValueError:
-                continue
-            key = label.lower()[:30]
-            if key not in seen:
-                seen.add(key)
-                items.append({"num": num, "label": label})
-    items.sort(key=lambda x: x["num"])
-    print(f"[portfolio/items] itens encontrados: {len(items)} | primeiros: {[i['label'] for i in items[:3]]}")
+    items = _extract_portfolio_items(full_text)
+    print(f"[portfolio/items] itens encontrados: {len(items)} | primeiros: {[i['label'] for i in items[:5]]}")
     return {"items": items, "source": source}
 
 
@@ -905,29 +960,7 @@ def portfolio_preview(user: dict = Depends(require_admin)):
     chunks = get_all_chunks(source)
     full_text = "\n".join(c["text"] for c in chunks)
     lines = [l for l in full_text.splitlines() if l.strip()][:80]
-
-    # Roda o mesmo regex do /portfolio/items para mostrar o que está sendo capturado
-    _re_diag = [
-        re.compile(r'^[(\[]?(\d{1,4})[)\]]?\s*[.):\-–|]\s*(.+)'),
-        re.compile(r'^ramo\s+(\d{1,6})\s*[.\-–:]?\s*(.+)', re.IGNORECASE),
-    ]
-    items_d, seen_d = [], set()
-    for raw in full_text.splitlines():
-        raw = raw.strip()
-        if not raw:
-            continue
-        for pat in _re_diag:
-            m = pat.match(raw)
-            if m:
-                lbl = m.group(2).strip().split(" | ")[0].strip()
-                if lbl and lbl.lower()[:30] not in seen_d:
-                    seen_d.add(lbl.lower()[:30])
-                    try:
-                        items_d.append({"num": int(m.group(1)), "label": lbl})
-                    except ValueError:
-                        pass
-                break
-    items_d.sort(key=lambda x: x["num"])
+    items_d = _extract_portfolio_items(full_text)
     return {
         "source": source,
         "total_chunks": len(chunks),

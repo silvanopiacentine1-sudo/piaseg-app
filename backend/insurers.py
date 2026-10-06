@@ -180,12 +180,22 @@ def extract_chunks(pdf_path: Path, chunk_size: int = 800, overlap: int = 100) ->
                     paras_in_tables.add(id(para))
 
             # Parágrafos fora de tabelas (ordem do documento)
+            # Trata <w:br/> (Shift+Enter) como quebra de linha dentro do parágrafo
             for para in root.iter(f"{{{W}}}p"):
                 if id(para) in paras_in_tables:
                     continue
-                text = "".join(t.text or "" for t in para.iter(f"{{{W}}}t"))
-                if text.strip():
-                    lines.append(text.strip())
+                current: list = []
+                for elem in para.iter():
+                    if elem.tag == f"{{{W}}}t":
+                        current.append(elem.text or "")
+                    elif elem.tag == f"{{{W}}}br":
+                        seg = "".join(current).strip()
+                        if seg:
+                            lines.append(seg)
+                        current = []
+                seg = "".join(current).strip()
+                if seg:
+                    lines.append(seg)
 
             # Tabelas: cada linha vira "célula1 | célula2 | ..."
             for table in root.iter(f"{{{W}}}tbl"):
